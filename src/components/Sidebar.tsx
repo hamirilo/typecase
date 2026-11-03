@@ -20,7 +20,6 @@ import {
   MoreHorizontal,
   Pin,
   Shapes,
-  Share2,
   Tag as TagIcon,
   Tags,
   Trash2,
@@ -372,11 +371,6 @@ function FolderTree() {
                     if (v && v.trim() && v !== f.name) run(() => api.renameFolder(f.id, v));
                   }}
                 />
-              ) : f.shared ? (
-                <span className="flex items-center gap-1">
-                  <span className="truncate">{f.name}</span>
-                  <Share2 size={11} className="shrink-0 text-accent" aria-label="共有中" />
-                </span>
               ) : (
                 f.name
               )
@@ -405,7 +399,6 @@ function FolderTree() {
                 { label: "名前を変更", hint: "F2", onClick: () => setEditing(f.id) },
                 { separator: true },
                 ...contentsMenu({ kind: "folder", id: f.id }),
-                { label: f.shared ? "共有の設定…" : "共有…", onClick: () => useStore.getState().setSharing(f.id) },
                 { separator: true },
                 { colors: { current: f.color, onPick: (c) => run(() => api.setFolderColor(f.id, c)) } },
                 { separator: true },

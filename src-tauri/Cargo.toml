@@ -1,7 +1,7 @@
 [package]
-name = "stockroom"
-version = "0.39.0"
-description = "A local stockroom for everything you collect"
+name = "typecase"
+version = "0.1.0"
+description = "A local case for the fonts you collect"
 authors = ["you"]
 edition = "2021"
 
@@ -11,7 +11,7 @@ edition = "2021"
 # The `_lib` suffix may seem redundant but it is necessary
 # to make the lib name unique and wouldn't conflict with the bin name.
 # This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
-name = "stockroom_lib"
+name = "typecase_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
@@ -42,12 +42,9 @@ woff2-patched = "0.4"
 brotli = { version = "7", default-features = false, features = ["std"] }
 flate2 = "1"
 tempfile = "3.27.0"
+base64 = "0.22"
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
-# Local HTTP servers for the browser extension (webimport.rs) and Claude (mcp/).
-tiny_http = "0.12"
-# Images handed to Claude (mcp/tools.rs).
-base64 = "0.22"
 # Texts: reading and writing Shift_JIS (CSV from Excel and in-house systems), texts/mod.rs.
 encoding_rs = "0.8"
 # Files: the preview inside iWork / Office files (files/mod.rs). Reading only.
@@ -61,10 +58,6 @@ tauri-plugin-log = "2"
 log = "0.4"
 # OS notifications for long tasks that end while the user is away (src/lib/osNotify.ts).
 tauri-plugin-notification = "2"
-# Sharing a folder on the local network (share.rs): this PC's addresses for
-# the URL, and the URL as a QR code for phones.
-if-addrs = "0.15"
-qrcode = { version = "0.14", default-features = false, features = ["svg"] }
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration

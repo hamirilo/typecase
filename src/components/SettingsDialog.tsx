@@ -1,10 +1,9 @@
 // The settings screen (⌘,), see docs/SETTINGS.md: the app's pages (一般,
-// サイドバー, ブラウザ拡張, Claude; settings.json and this PC), then the open
-// library's (概要, 種類, 親子の紐づけ, サイドバー, フォルダの共有; stored in its library.db). Changes are saved as
+// サイドバー; settings.json and this PC), then the open
+// library's (概要, 種類, 親子の紐づけ, サイドバー; stored in its library.db). Changes are saved as
 // they are made. The frame and rows are SettingsFrame's, the same in every
 // tool (desktop-platform UI §9).
 import {
-  Bot,
   FileText,
   NotebookText,
   Video,
@@ -16,10 +15,8 @@ import {
   Library,
   Link2,
   PanelLeft,
-  Puzzle,
   Settings,
   Shapes,
-  Share2,
   Type,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -33,9 +30,6 @@ import { isMac } from "../lib/shortcuts";
 import { appVersion } from "../lib/update";
 import appIcon from "../../src-tauri/icons/128x128@2x.png";
 import { sidebarHidden, usedModes, useStore, type SettingsTab } from "../store";
-import { WebImportSettings } from "./WebImportDialog";
-import { ClaudeSettings } from "./ClaudeSettings";
-import { ShareSettings } from "./ShareDialog";
 import { RadioRows, Row, RowButton, Section, SettingsFrame, type SettingsGroup } from "./SettingsFrame";
 import { UpdateSection } from "./UpdateSection";
 
@@ -57,8 +51,6 @@ type Page = { id: SettingsTab; label: string; icon: React.ReactNode };
 const APP_PAGES: Page[] = [
   { id: "general", label: "一般", icon: <Settings size={15} /> },
   { id: "sidebar", label: "サイドバー", icon: <PanelLeft size={15} /> },
-  { id: "extension", label: "ブラウザ拡張", icon: <Puzzle size={15} /> },
-  { id: "claude", label: "Claude", icon: <Bot size={15} /> },
 ];
 
 /** Saved in the open library (library.db). */
@@ -67,7 +59,6 @@ const LIBRARY_PAGES: Page[] = [
   { id: "libraryKinds", label: "種類", icon: <Shapes size={15} /> },
   { id: "libraryLinks", label: "親子の紐づけ", icon: <Link2 size={15} /> },
   { id: "librarySidebar", label: "サイドバー", icon: <PanelLeft size={15} /> },
-  { id: "libraryShare", label: "フォルダの共有", icon: <Share2 size={15} /> },
 ];
 
 /** Pages of this build: one with fewer features leaves some out (src/lib/limits.ts). */
@@ -111,13 +102,10 @@ function Dialog({ tab }: { tab: SettingsTab }) {
     <SettingsFrame groups={groups} page={tab} onPage={openSettings} onClose={close}>
       {tab === "general" && <GeneralPage />}
       {tab === "sidebar" && <AppSidebarPage />}
-      {tab === "extension" && <WebImportSettings />}
-      {tab === "claude" && <ClaudeSettings />}
       {tab === "library" && <LibraryPage />}
       {tab === "libraryKinds" && <LibraryKindsPage />}
       {tab === "libraryLinks" && <LibraryLinksPage />}
       {tab === "librarySidebar" && <LibrarySidebarPage />}
-      {tab === "libraryShare" && <ShareSettings />}
     </SettingsFrame>
   );
 }

@@ -162,19 +162,16 @@ export interface ExportRequest {
 }
 
 /**
- * The settings screen's pages: the app's (一般 … Claude), then the open
- * library's (概要, 種類, 親子の紐づけ, サイドバー, フォルダの共有). See docs/SETTINGS.md.
+ * The settings screen's pages: the app's (一般, サイドバー), then the open
+ * library's (概要, 種類, 親子の紐づけ, サイドバー). See docs/SETTINGS.md.
  */
 export type SettingsTab =
   | "general"
   | "sidebar"
-  | "extension"
-  | "claude"
   | "library"
   | "libraryKinds"
   | "libraryLinks"
-  | "librarySidebar"
-  | "libraryShare";
+  | "librarySidebar";
 
 /** Where sidebar entries are hidden: the app's settings or the open library's. */
 export type SidebarScope = "app" | "library";
@@ -255,10 +252,6 @@ interface State {
   settingsTab: SettingsTab | null;
   /** The page the settings showed last; "last" opens it again (UI §9). */
   lastSettingsTab: SettingsTab;
-  /** A browser extension asks to connect; `code` is also shown in the extension. */
-  /** `extension`: the asking extension's id (chrome://extensions shows it). */
-  /** An extension (its id) or another app (the name it gives itself) asks to connect. */
-  pairRequest: { id: string; code: string; extension: string | null; app: string | null } | null;
   /** Similar view: how alike images must be. */
   similarLevel: SimilarLevel;
   /** Similar view: copies the user chose to keep (at most one per group). */
@@ -271,8 +264,6 @@ interface State {
   sheet: Item[] | null;
   /** The "別のライブラリへ" dialog: selected items, or every item of a kind. */
   transfer: TransferRequest | null;
-  /** The folder the share dialog is open for (share.rs). */
-  sharing: string | null;
   /** The export dialog (書き出し…). */
   exporting: ExportRequest | null;
 
@@ -397,14 +388,12 @@ interface State {
   setPicker: (p: State["picker"]) => void;
   /** "last": the page shown last (一般 if it was the library's and none is open). */
   openSettings: (tab: SettingsTab | "last" | null) => void;
-  setPairRequest: (r: State["pairRequest"]) => void;
   setSimilarLevel: (l: SimilarLevel) => void;
   /** Marks `id` as the copy to keep in its group. */
   pickKeeper: (id: string) => void;
   setReview: (r: DuplicateReview | null) => void;
   setSheet: (items: Item[] | null) => void;
   setTransfer: (t: TransferRequest | null) => void;
-  setSharing: (folderId: string | null) => void;
   setExporting: (r: ExportRequest | null) => void;
   refresh: () => Promise<void>;
 
@@ -901,14 +890,12 @@ export const useStore = create<State>((set, get) => ({
   picker: null,
   settingsTab: null,
   lastSettingsTab: "general",
-  pairRequest: null,
   similarLevel: (["strict", "standard", "loose"] as const).find((l) => l === load("similarLevel")) ?? "standard",
   keepPick: new Set(),
   dismissedGroups: 0,
   review: null,
   sheet: null,
   transfer: null,
-  sharing: null,
   exporting: null,
 
   items: [],
@@ -1358,7 +1345,6 @@ export const useStore = create<State>((set, get) => ({
       const last = s.lastSettingsTab;
       return { settingsTab: last.startsWith("library") && !s.library ? "general" : last };
     }),
-  setPairRequest: (pairRequest) => set({ pairRequest }),
   setSimilarLevel: (similarLevel) => {
     set({ similarLevel, keepPick: new Set(), selected: new Set(), anchor: null, focus: null });
     persist("similarLevel", similarLevel);
@@ -1373,7 +1359,6 @@ export const useStore = create<State>((set, get) => ({
   setReview: (review) => set({ review }),
   setSheet: (sheet) => set({ sheet }),
   setTransfer: (transfer) => set({ transfer }),
-  setSharing: (sharing) => set({ sharing }),
   setExporting: (exporting) => set({ exporting }),
 
   refresh: async () => {

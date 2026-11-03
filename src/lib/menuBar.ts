@@ -88,8 +88,6 @@ const APP_WIDE = new Set([
   "app.settings",
   "app.checkUpdate",
   "help.shortcuts",
-  "help.webImport",
-  "help.claude",
   "help.log",
   "help.about",
   "help.releaseNotes",
@@ -158,19 +156,19 @@ async function build(libraries: LibraryEntry[]): Promise<Menu> {
 
   const appMenu = isMac
     ? [
-        submenu("Stockroom", [
-          PredefinedMenuItem.new({ item: { About: null }, text: "Stockroom について" }),
+        submenu("Typecase", [
+          PredefinedMenuItem.new({ item: { About: null }, text: "Typecase について" }),
           ...opt("app.checkUpdate"),
           sep(),
           cmd("app.settings"),
           sep(),
           PredefinedMenuItem.new({ item: "Services", text: "サービス" }),
           sep(),
-          PredefinedMenuItem.new({ item: "Hide", text: "Stockroom を隠す" }),
+          PredefinedMenuItem.new({ item: "Hide", text: "Typecase を隠す" }),
           PredefinedMenuItem.new({ item: "HideOthers", text: "ほかを隠す" }),
           PredefinedMenuItem.new({ item: "ShowAll", text: "すべてを表示" }),
           sep(),
-          PredefinedMenuItem.new({ item: "Quit", text: "Stockroom を終了" }),
+          PredefinedMenuItem.new({ item: "Quit", text: "Typecase を終了" }),
         ]),
       ]
     : [];
@@ -358,8 +356,6 @@ async function build(libraries: LibraryEntry[]): Promise<Menu> {
 
   const help = submenu("ヘルプ", [
     cmd("help.shortcuts"),
-    ...opt("help.webImport"),
-    ...opt("help.claude"),
     sep(),
     ...opt("help.releaseNotes"),
     cmd("help.log"),

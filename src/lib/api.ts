@@ -521,8 +521,6 @@ export interface Folder {
   byKind: KindCounts;
   /** Colour name (see lib/colors.ts), if set. */
   color: string | null;
-  /** Shared on the local network (src-tauri/src/share.rs). */
-  shared: boolean;
   mode: Mode;
 }
 
@@ -561,63 +559,6 @@ export interface ImportSummary {
   failed: string[];
   /** New items by kind. */
   kinds?: Partial<Record<ItemKind, number>>;
-}
-
-/** Saving from the browser extension (src-tauri/src/webimport.rs). */
-export interface WebImportStatus {
-  enabled: boolean;
-  /** The local server is listening. */
-  running: boolean;
-  port: number;
-  /** Why it isn't running although enabled (e.g. the port is taken). */
-  error: string | null;
-  /** Where the extension was put for Chrome, once set up. */
-  extensionDir: string | null;
-}
-
-/** Organizing from Claude (src-tauri/src/mcp/). */
-export interface McpStatus {
-  enabled: boolean;
-  /** The local server is listening. */
-  running: boolean;
-  port: number;
-  /** Why it isn't running although enabled (e.g. the port is taken). */
-  error: string | null;
-  /** What to paste to connect, once turned on. */
-  claudeCodeCommand: string | null;
-  desktopConfig: string | null;
-}
-
-/** Folders shared read-only on the local network (src-tauri/src/share.rs). */
-export interface ShareStatus {
-  /** The server is listening (while the open library shares a folder). */
-  running: boolean;
-  port: number;
-  /** Why it isn't running although a folder is shared (e.g. the port is taken). */
-  error: string | null;
-  shares: ShareInfo[];
-}
-
-export interface ShareInfo {
-  folderId: string;
-  /** The secret in the URL. */
-  token: string;
-  /** The original files may be downloaded. */
-  download: boolean;
-  createdAt: number;
-  /** The folder's place in the sidebar ("旅行 / 京都"). */
-  path: string;
-  /** The URL at each address of this PC, the likeliest first. Empty when it isn't on a network. */
-  urls: string[];
-}
-
-/** A change made from Claude, recorded so it can be undone (src-tauri/src/changes.rs). */
-export interface Change {
-  id: number;
-  at: number;
-  source: string;
-  summary: string;
-  undone: boolean;
 }
 
 export const api = {
@@ -711,28 +652,6 @@ export const api = {
       headers: { "x-name": encodeURIComponent(name), "x-folder": folderId ?? "" },
     }),
   supportedExts: () => invoke<string[]>("supported_exts"),
-  webImportStatus: () => invoke<WebImportStatus>("web_import_status"),
-  setWebImport: (enabled: boolean) => invoke<WebImportStatus>("set_web_import", { enabled }),
-  /** A new connection key: extensions set up elsewhere stop working until set up again. */
-  resetWebImportToken: () => invoke<WebImportStatus>("reset_web_import_token"),
-  /** Copies the extension to a folder Chrome can load and shows it; returns the folder. */
-  installExtension: () => invoke<string>("install_extension"),
-  /** Answers an extension's request to connect (the "web-pair" event). */
-  answerWebPair: (id: string, allow: boolean) => invoke<void>("answer_web_pair", { id, allow }),
-  mcpStatus: () => invoke<McpStatus>("mcp_status"),
-  setMcp: (enabled: boolean) => invoke<McpStatus>("set_mcp", { enabled }),
-  /** A new token: Claude Code has to be set up again. */
-  resetMcpToken: () => invoke<McpStatus>("reset_mcp_token"),
-  shareStatus: () => invoke<ShareStatus>("share_status"),
-  /** Shares a folder (keeping its URL if it already is) or stops sharing it. */
-  setFolderShare: (folderId: string, on: boolean) => invoke<ShareStatus>("set_folder_share", { folderId, on }),
-  setShareDownload: (folderId: string, on: boolean) => invoke<ShareStatus>("set_share_download", { folderId, on }),
-  stopAllShares: () => invoke<ShareStatus>("stop_all_shares"),
-  /** A URL as a QR code (SVG markup). */
-  shareQr: (text: string) => invoke<string>("share_qr", { text }),
-  listChanges: () => invoke<Change[]>("list_changes"),
-  /** Reverts a change made from Claude; `skipped` = entries edited again since, left alone. */
-  undoChange: (id: number) => invoke<{ summary: string; skipped: number }>("undo_change", { id }),
   indexSimilar: () => invoke<number>("index_similar"),
   /** Treats these images as "not duplicates" so they aren't proposed together again. */
   dismissDuplicates: (ids: string[]) => invoke<void>("dismiss_duplicates", { ids }),

@@ -4,7 +4,7 @@
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { modeOf, type Folder, type Item, type ItemKind, type ItemQuery, type KindCounts, type Mode, type Rule, type SimilarLevel, type Tag } from "../lib/api";
 import type { SystemFont } from "../features/fonts/api";
-import { buildHas, NO_CONNECT } from "../lib/limits";
+import { buildHas } from "../lib/limits";
 
 /** The file types of each kind (src-tauri/src/formats.rs `SUPPORTED_EXTS`). */
 const KIND_EXTS: [ItemKind, string[]][] = [
@@ -17,7 +17,6 @@ const KIND_EXTS: [ItemKind, string[]][] = [
 
 /** Commands a build with fewer features refuses (src-tauri/src/limits.rs). */
 const LEFT_OUT = new Set([
-  ...(NO_CONNECT ? ["set_web_import", "reset_web_import_token", "install_extension", "set_mcp", "reset_mcp_token"] : []),
   ...(buildHas("text") ? [] : ["create_text"]),
   ...(buildHas("bookmark") ? [] : ["create_bookmark"]),
 ]);
@@ -133,7 +132,7 @@ const inWeight = (i: MockItem, key: string) => {
   const [lo, hi] = [i.fontWeightMin ?? i.fontWeight ?? 400, i.fontWeightMax ?? i.fontWeight ?? 400];
   return lo <= r[2] && hi >= r[1];
 };
-const folders: Omit<Folder, "count" | "byKind" | "shared">[] = [];
+const folders: Omit<Folder, "count" | "byKind">[] = [];
 /** Items by kind (kinds with none left out), as the backend counts them for the sidebar. */
 const byKind = (list: { kind: ItemKind }[]): KindCounts => {
   const out: KindCounts = {};
@@ -830,51 +829,6 @@ const mockLibraries = [
 const librarySettings: Record<string, unknown> = {};
 const appSettings = { startup: "last", autoUpdate: true, sidebarHidden: {} };
 
-const webImport = { enabled: false, running: false, port: 41620, error: null, extensionDir: null as string | null };
-const mcp = { enabled: false, running: false, port: 41621, error: null, token: "mock-token" };
-const claudeChanges = [
-  { id: 2, at: Date.now() - 60_000, source: "mcp", summary: "フォルダへ移しました（「写真/旅行/京都」4 件）", undone: false },
-  { id: 1, at: Date.now() - 120_000, source: "mcp", summary: "タグを付けました（「京都」4 件、「東京」2 件）", undone: false },
-];
-
-// Shared folders: folder id -> download allowed (share.rs).
-const shares = new Map<string, { token: string; download: boolean; createdAt: number }>();
-
-function shareStatus() {
-  const path = (fid: string): string => {
-    const f = folders.find((x) => x.id === fid);
-    return !f ? "" : f.parentId ? `${path(f.parentId)} / ${f.name}` : f.name;
-  };
-  for (const fid of [...shares.keys()]) if (!folders.some((f) => f.id === fid)) shares.delete(fid);
-  return {
-    running: shares.size > 0,
-    port: 41640,
-    error: null,
-    shares: [...shares].map(([folderId, s]) => ({
-      folderId,
-      ...s,
-      path: path(folderId),
-      urls: [`http://192.168.1.23:41640/s/${s.token}/`, `http://Mock-Mac.local:41640/s/${s.token}/`],
-    })),
-  };
-}
-
-function mcpStatus() {
-  const on = mcp.enabled;
-  return {
-    enabled: on,
-    running: mcp.running,
-    port: mcp.port,
-    error: mcp.error,
-    claudeCodeCommand: on
-      ? `claude mcp add --scope user --transport http stockroom http://127.0.0.1:41621/mcp --header "Authorization: Bearer ${mcp.token}"`
-      : null,
-    desktopConfig: on
-      ? JSON.stringify({ mcpServers: { "stockroom": { command: "/Applications/Stockroom.app/Contents/MacOS/stockroom", args: ["--mcp"] } } }, null, 2)
-      : null,
-  };
-}
-
 function countBy<T>(xs: T[], key: (x: T) => string): Record<string, number> {
   const out: Record<string, number> = {};
   for (const x of xs) out[key(x)] = (out[key(x)] ?? 0) + 1;
@@ -1326,59 +1280,12 @@ function handle(cmd: string, a: any): unknown {
     case "import_paths":
     case "import_bytes":
       return { imported: 0, duplicates: 0, failed: ["mock backend: import is not available in the browser"] };
-    case "web_import_status":
-      return { ...webImport };
-    case "set_web_import":
-      webImport.enabled = webImport.running = a.enabled;
-      return { ...webImport };
-    case "reset_web_import_token":
-      return { ...webImport };
-    case "answer_web_pair":
-      return null;
-    case "share_status":
-      return shareStatus();
-    case "set_folder_share":
-      if (!a.on) shares.delete(a.folderId);
-      else if (!shares.has(a.folderId))
-        shares.set(a.folderId, { token: `mock${id()}`, download: true, createdAt: Date.now() });
-      return shareStatus();
-    case "set_share_download": {
-      const s = shares.get(a.folderId);
-      if (s) s.download = a.on;
-      return shareStatus();
-    }
-    case "stop_all_shares":
-      shares.clear();
-      return shareStatus();
-    case "share_qr":
-      // A stand-in: a framed square, not a code a camera can read.
-      return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect width="10" height="10" fill="#fff"/><rect x="1" y="1" width="8" height="8" fill="none" stroke="#000"/></svg>';
-    case "mcp_status":
-      return mcpStatus();
-    case "set_mcp":
-      mcp.enabled = mcp.running = a.enabled;
-      return mcpStatus();
-    case "reset_mcp_token":
-      mcp.token = `mock-${Date.now()}`;
-      return mcpStatus();
-    case "list_changes":
-      return claudeChanges.map((c) => ({ ...c }));
-    case "undo_change": {
-      const c = claudeChanges.find((x) => x.id === a.id);
-      if (!c) throw "この変更の記録はもうありません";
-      if (c.undone) throw "この変更はすでに元に戻しています";
-      c.undone = true;
-      return { summary: c.summary, skipped: 0 };
-    }
-    case "install_extension":
-      webImport.extensionDir = "/Users/mock/Library/Application Support/com.local.stockroom/chrome-extension";
-      return webImport.extensionDir;
     case "list_folders":
       return folders
         .filter((f) => !a.mode || f.mode === a.mode)
         .map((f) => {
           const of = ofMode(f.mode)(live()).filter((i) => inFolder(i.id, f.id));
-          return { ...f, count: of.length, byKind: byKind(of), shared: shares.has(f.id) };
+          return { ...f, count: of.length, byKind: byKind(of) };
         });
     case "place_folder":
       // Not under a folder of the other mode.

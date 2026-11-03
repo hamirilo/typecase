@@ -164,7 +164,7 @@ const ALL_COMMANDS: Command[] = [
   { id: "app.checkUpdate", title: "アップデートを確認…", run: () => checkForUpdate(true) },
   // Windows' ヘルプ menu (macOS has the system's about panel in the app menu):
   // the settings' アップデート section shows the app, its version and updates.
-  { id: "help.about", title: "Stockroom について", run: (s) => s.openSettings("general") },
+  { id: "help.about", title: "Typecase について", run: (s) => s.openSettings("general") },
   { id: "help.releaseNotes", title: "このバージョンの更新内容", run: () => openReleaseNotes() },
   {
     id: "help.shortcuts",
@@ -173,8 +173,6 @@ const ALL_COMMANDS: Command[] = [
     keyBy: "global",
     run: () => useShortcutHelp.getState().setOpen(true),
   },
-  { id: "help.webImport", title: "ブラウザ拡張と連携…", run: (s) => s.openSettings("extension") },
-  { id: "help.claude", title: "Claude と連携…", run: (s) => s.openSettings("claude") },
   { id: "help.log", title: "ログを表示", run: (s) => s.run(() => api.revealLog()) },
 
   // ------------------------------------------------------------ library

@@ -20,7 +20,7 @@ import { isMac } from "./shortcuts";
 import { useStore } from "../store";
 
 /** The name every update dialog and message starts from, so it's clear which app is asking. */
-export const APP_NAME = "Stockroom";
+export const APP_NAME = "Typecase";
 
 const st = () => useStore.getState();
 

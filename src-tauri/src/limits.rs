@@ -4,8 +4,6 @@
 //!
 //! - `STOCKROOM_KINDS`: the kinds it handles, e.g. `image` or `image,video`.
 //!   Files of other kinds are skipped like an unsupported type.
-//! - `STOCKROOM_NO_CONNECT`: no browser extension and no Claude connection;
-//!   their ports are never opened.
 //! - `STOCKROOM_NO_UPDATE`: no in-app updates (the updater isn't loaded).
 //!
 //! Not a limit, but set the same way: `STOCKROOM_TAG_PREFIX`, what this
@@ -23,9 +21,6 @@ const fn on(v: Option<&str>) -> bool {
         None => false,
     }
 }
-
-/// No browser extension and no Claude connection.
-pub const NO_CONNECT: bool = on(option_env!("STOCKROOM_NO_CONNECT"));
 
 /// No in-app updates.
 pub const NO_UPDATE: bool = on(option_env!("STOCKROOM_NO_UPDATE"));
@@ -81,15 +76,6 @@ pub fn require_kind(kind: Kind) -> Result<(), String> {
         Ok(())
     } else {
         Err(LEFT_OUT.into())
-    }
-}
-
-/// Errors with `LEFT_OUT` in a build without the extension and Claude.
-pub fn require_connect() -> Result<(), String> {
-    if NO_CONNECT {
-        Err(LEFT_OUT.into())
-    } else {
-        Ok(())
     }
 }
 

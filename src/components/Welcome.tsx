@@ -10,7 +10,7 @@ export function Welcome() {
     <div className="flex h-full flex-col items-center justify-center gap-6 overflow-y-auto py-8">
       <Library size={56} strokeWidth={1.25} className="text-accent" />
       <div className="text-center">
-        <h1 className="text-xl font-semibold">Stockroom</h1>
+        <h1 className="text-xl font-semibold">Typecase</h1>
         <p className="mt-1 text-dim">画像はライブラリフォルダにコピーして管理されます</p>
       </div>
       <div className="flex flex-col gap-2">

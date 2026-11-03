@@ -1,7 +1,7 @@
 //! Fills a library with generated test images.
 //!   cargo run --release --example seed -- <path/to/X.library> [count]
 use image::{Rgb, RgbImage};
-use stockroom_lib::{db, import, library::Library};
+use typecase_lib::{db, import, library::Library};
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::time::Instant;
@@ -11,7 +11,7 @@ fn main() {
     let root = PathBuf::from(args.next().expect("usage: seed <library> [count]"));
     let count: u32 = args.next().map(|s| s.parse().unwrap()).unwrap_or(200);
 
-    let src = std::env::temp_dir().join(format!("stockroom-seed-{}", std::process::id()));
+    let src = std::env::temp_dir().join(format!("typecase-seed-{}", std::process::id()));
     std::fs::create_dir_all(&src).unwrap();
     let t = Instant::now();
     let files: Vec<PathBuf> = (0..count)

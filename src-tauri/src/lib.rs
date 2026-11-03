@@ -1,6 +1,4 @@
-pub mod appdirs;
 pub mod bookmarks;
-pub mod changes;
 pub mod commands;
 pub mod db;
 pub mod export;
@@ -10,23 +8,19 @@ pub mod formats;
 pub mod import;
 pub mod library;
 pub mod limits;
-pub mod loopback;
-pub mod mcp;
 pub mod orient;
 pub mod proxy;
 pub mod search;
-pub mod share;
 pub mod sheet;
 pub mod similar;
 pub mod texts;
 pub mod transfer;
 pub mod videos;
-pub mod webimport;
 
 use commands::*;
 
 /// The log file's name in the app's log folder (without ".log").
-pub const LOG_FILE: &str = "stockroom";
+pub const LOG_FILE: &str = "typecase";
 
 /// Panics into the log too: release builds abort on panic, so stderr is all
 /// that would be left, and nobody sees it.
@@ -67,14 +61,11 @@ fn main_window(app: &tauri::AppHandle) -> tauri::Result<()> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Before the plugins below open the app's folders (logs, window state).
-    let moved = appdirs::move_from_old_name();
     // The menu bar is made by the frontend from its command table
     // (src/lib/menuBar.ts); until it loads, macOS shows Tauri's default menu.
     tauri::Builder::default()
         // First, so a second launch quits before setting anything up: it
-        // only brings this app's window up. One app holds one library, and
-        // the extension / Claude ports can only be served once.
+        // only brings this app's window up. One app holds one library.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_main_window(app)))
         // log::* from Rust and the frontend's warnings (src/lib/log.ts), into
         // the app's log folder ("ログを表示" in the Help menu) and stdout.
@@ -110,14 +101,11 @@ pub fn run() {
                 .build(),
         )
         .manage(AppState::default())
-        .setup(move |app| {
+        .setup(|app| {
             log_panics();
             // A build without in-app updates doesn't load the updater (limits.rs).
             if !limits::NO_UPDATE {
                 app.handle().plugin(tauri_plugin_updater::Builder::new().build())?;
-            }
-            for m in &moved {
-                log::info!("{m}");
             }
             main_window(app.handle())?;
             log::info!(
@@ -127,9 +115,7 @@ pub fn run() {
                 std::env::consts::OS,
                 std::env::consts::ARCH
             );
-            start_web_import(app.handle());
             start_lock_refresh(app.handle());
-            start_mcp(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -213,21 +199,6 @@ pub fn run() {
             preview_duplicates,
             resolve_duplicates,
             supported_exts,
-            web_import_status,
-            set_web_import,
-            reset_web_import_token,
-            install_extension,
-            answer_web_pair,
-            mcp_status,
-            set_mcp,
-            reset_mcp_token,
-            share_status,
-            set_folder_share,
-            set_share_download,
-            stop_all_shares,
-            share_qr,
-            list_changes,
-            undo_change,
             list_folders,
             create_folder,
             rename_folder,

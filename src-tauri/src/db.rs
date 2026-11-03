@@ -2329,8 +2329,6 @@ pub struct Folder {
     /// `count` by kind (docs/KINDS.md).
     pub by_kind: KindCounts,
     pub color: Option<String>,
-    /// Shared on the local network (share.rs).
-    pub shared: bool,
     pub mode: Mode,
 }
 
@@ -2341,7 +2339,6 @@ pub fn list_folders(conn: &Connection, mode: Option<Mode>) -> DbResult<Vec<Folde
            (SELECT COUNT(*) FROM item_folders x JOIN items i ON i.id = x.item_id
             WHERE x.folder_id = f.id AND i.deleted_at IS NULL AND (i.kind = 'font') = (f.mode = 'font')),
            f.color,
-           EXISTS (SELECT 1 FROM shares s WHERE s.folder_id = f.id),
            f.mode
          FROM folders f WHERE ?1 IS NULL OR f.mode = ?1
          ORDER BY f.sort_order IS NULL, f.sort_order, f.name COLLATE NOCASE",
@@ -2356,8 +2353,7 @@ pub fn list_folders(conn: &Connection, mode: Option<Mode>) -> DbResult<Vec<Folde
             name: r.get(2)?,
             count: r.get(3)?,
             color: r.get(4)?,
-            shared: r.get(5)?,
-            mode: Mode::parse(&r.get::<_, String>(6)?),
+            mode: Mode::parse(&r.get::<_, String>(5)?),
         })
     })?;
     rows.collect()
@@ -3062,12 +3058,6 @@ pub fn set_color(conn: &Connection, target: ColorTarget, id: &dyn ToSql, color: 
     Ok(())
 }
 
-/// The tag `name` of `mode`, if there is one.
-pub(crate) fn tag_id(conn: &Connection, name: &str, mode: Mode) -> DbResult<Option<i64>> {
-    conn.query_row("SELECT id FROM tags WHERE name = ?1 AND mode = ?2", params![name, mode.as_str()], |r| r.get(0))
-        .optional()
-}
-
 /// The tag `name` of `mode`, made if there isn't one.
 pub(crate) fn ensure_tag(conn: &Connection, name: &str, mode: Mode) -> DbResult<i64> {
     conn.execute("INSERT OR IGNORE INTO tags (name, mode) VALUES (?1, ?2)", params![name, mode.as_str()])?;
@@ -3204,6 +3194,12 @@ pub fn selection_info(conn: &Connection, ids: &[String]) -> DbResult<SelectionIn
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The tag `name` of `mode`, if there is one.
+    fn tag_id(conn: &Connection, name: &str, mode: Mode) -> DbResult<Option<i64>> {
+        conn.query_row("SELECT id FROM tags WHERE name = ?1 AND mode = ?2", params![name, mode.as_str()], |r| r.get(0))
+            .optional()
+    }
 
     fn mem() -> Connection {
         let conn = Connection::open_in_memory().unwrap();

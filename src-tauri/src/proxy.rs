@@ -130,7 +130,7 @@ mod imp {
             release: std::ptr::null(),
             copy_description: std::ptr::null(),
         };
-        let mode = cfstr("StockroomPAC");
+        let mode = cfstr("TypecasePAC");
         unsafe {
             let source = CFNetworkExecuteProxyAutoConfigurationURL(pac, target, on_pac, &mut ctx);
             if source.is_null() {
@@ -211,7 +211,7 @@ mod imp {
 
     /// Runs auto-detection / the PAC script through WinHTTP.
     fn auto(url: &str, config_url: Option<&str>, detect: bool) -> Option<Option<String>> {
-        let agent: Vec<u16> = "Stockroom\0".encode_utf16().collect();
+        let agent: Vec<u16> = "Typecase\0".encode_utf16().collect();
         let session = unsafe {
             WinHttpOpen(PCWSTR(agent.as_ptr()), WINHTTP_ACCESS_TYPE_NO_PROXY, PCWSTR::null(), PCWSTR::null(), 0)
         };

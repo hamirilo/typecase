@@ -1104,32 +1104,6 @@ export async function pasteTags(ids: string[]) {
   st().toast(`${ids.length} 件にタグ ${names.length} 件を貼り付けました`);
 }
 
-/**
- * Undoes changes made from Claude (newest first) and says how it went.
- * Change ids are numbered per library: `root` is the library they belong to,
- * and nothing is undone once another one is open.
- */
-export async function undoChanges(ids: number[], root: string | undefined) {
-  if (st().library?.root !== root) {
-    st().toast("別のライブラリを開いているため元に戻せません。元のライブラリで、設定の「連携」から戻せます", true);
-    return;
-  }
-  let skipped = 0;
-  let done = 0;
-  await st().run(async () => {
-    for (const id of [...ids].sort((a, b) => b - a)) {
-      skipped += (await api.undoChange(id)).skipped;
-      done++;
-    }
-  });
-  if (!done) return;
-  st().notify({
-    title: done > 1 ? `Claude の変更 ${done} 件を元に戻しました` : "Claude の変更を元に戻しました",
-    detail: skipped ? `${skipped} 件はその後に変更されていたため、そのままにしました` : undefined,
-    kind: "success",
-  });
-}
-
 // ------------------------------------------- a video's own thumbnail (docs/VIDEO.md)
 
 /** Image files a thumbnail can be made from (formats.rs `decode`). */
