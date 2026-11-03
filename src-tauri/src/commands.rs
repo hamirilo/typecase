@@ -50,9 +50,9 @@ pub struct AppSettings {
     startup: Startup,
     /// Look for a new version a few seconds after launch.
     auto_update: bool,
-    /// Sidebar entries hidden per mode, for the libraries that follow the
-    /// app's sidebar (library.db `sidebar` is not "own"). Read by the frontend.
-    sidebar_hidden: std::collections::BTreeMap<String, Vec<String>>,
+    /// Sidebar entries hidden, for the libraries that follow the app's
+    /// sidebar (library.db `sidebar` is not "own"). Read by the frontend.
+    sidebar_hidden: Vec<String>,
 }
 
 impl Default for AppSettings {
@@ -350,13 +350,12 @@ pub fn forget_library(app: AppHandle, path: PathBuf) -> CmdResult<()> {
 
 /// Copies items (with their tags, folder, rating, favourite, ...) into another
 /// library; `move_items` then puts them in this library's trash. Without
-/// `ids`, every item of `kind` not in the trash.
+/// `ids`, every item not in the trash.
 #[tauri::command]
 pub async fn transfer_items(
     app: AppHandle,
     dest: PathBuf,
     ids: Option<Vec<String>>,
-    kind: Option<db::Kind>,
     move_items: bool,
 ) -> CmdResult<crate::transfer::TransferSummary> {
     tauri::async_runtime::spawn_blocking(move || {
@@ -371,7 +370,7 @@ pub async fn transfer_items(
         let (src_root, src) = with_lib(&state, |lib| {
             let ids = match ids {
                 Some(ids) => ids,
-                None => db::live_ids(&lib.conn, kind).map_err(err)?,
+                None => db::live_ids(&lib.conn).map_err(err)?,
             };
             Ok((lib.root.clone(), crate::transfer::Source::read(lib, &ids)?))
         })?;
@@ -441,27 +440,19 @@ pub struct ItemView {
     item: Item,
     file_path: String,
     thumb_path: String,
-    /// What the viewer shows (a JPEG copy for HEIC / TIFF).
-    display_path: String,
-    /// A video's thumbnail is one the user set (docs/VIDEO.md).
-    own_thumb: bool,
 }
 
-/// Off the main thread, and the similar view's grouping (slow on a large
-/// library) after letting go of the library, so neither freezes the window.
+/// Off the main thread, so a large library doesn't freeze the window.
 #[tauri::command]
 pub async fn query_items(app: AppHandle, query: ItemQuery) -> CmdResult<Vec<ItemView>> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
-        let (root, rows) = with_lib(&state, |lib| Ok((lib.root.clone(), db::query_rows(&lib.conn, &query).map_err(err)?)))?;
+        let (root, rows) = with_lib(&state, |lib| Ok((lib.root.clone(), db::query_items(&lib.conn, &query).map_err(err)?)))?;
         Ok(rows
-            .finish()
             .into_iter()
             .map(|item| ItemView {
                 file_path: crate::library::file_path(&root, &item).display().to_string(),
                 thumb_path: crate::library::thumb_path(&root, &item).display().to_string(),
-                display_path: crate::library::display_path(&root, &item).display().to_string(),
-                own_thumb: crate::videos::thumb::is_custom(&item.thumb),
                 item,
             })
             .collect())
@@ -483,8 +474,8 @@ pub async fn facet_counts(app: AppHandle, query: ItemQuery) -> CmdResult<db::Fac
 }
 
 #[tauri::command]
-pub fn get_counts(state: State<AppState>, mode: Option<db::Mode>) -> CmdResult<Counts> {
-    with_lib(&state, |lib| db::counts(&lib.conn, mode).map_err(err))
+pub fn get_counts(state: State<AppState>) -> CmdResult<Counts> {
+    with_lib(&state, |lib| db::counts(&lib.conn).map_err(err))
 }
 
 #[tauri::command]
@@ -509,45 +500,6 @@ pub fn rename_item(state: State<AppState>, id: String, name: String) -> CmdResul
 #[tauri::command]
 pub fn trash_items(state: State<AppState>, ids: Vec<String>) -> CmdResult<()> {
     with_lib(&state, |lib| db::trash_items(&lib.conn, &ids).map_err(err))
-}
-
-/// Marks the images as "not duplicates" so they aren't proposed together again.
-#[tauri::command]
-pub fn dismiss_duplicates(state: State<AppState>, ids: Vec<String>) -> CmdResult<()> {
-    with_lib(&state, |lib| db::dismiss_duplicates(&mut lib.conn, &ids).map_err(err))
-}
-
-#[tauri::command]
-pub fn undismiss_duplicates(state: State<AppState>, ids: Vec<String>) -> CmdResult<()> {
-    with_lib(&state, |lib| db::undismiss_duplicates(&lib.conn, &ids).map_err(err))
-}
-
-#[tauri::command]
-pub fn clear_dismissed_duplicates(state: State<AppState>) -> CmdResult<()> {
-    with_lib(&state, |lib| db::clear_dismissed_duplicates(&lib.conn).map_err(err))
-}
-
-/// How many dismissed groups are in effect.
-#[tauri::command]
-pub fn count_dismissed_duplicates(state: State<AppState>) -> CmdResult<usize> {
-    with_lib(&state, |lib| db::dismissed_duplicate_groups(&lib.conn).map_err(err))
-}
-
-/// What tidying these groups would carry over to the copies kept.
-#[tauri::command]
-pub fn preview_duplicates(
-    state: State<AppState>,
-    groups: Vec<db::DuplicateGroup>,
-) -> CmdResult<Vec<db::DuplicateEffect>> {
-    with_lib(&state, |lib| db::plan_duplicates(&lib.conn, &groups).map_err(err))
-}
-
-#[tauri::command]
-pub fn resolve_duplicates(
-    state: State<AppState>,
-    groups: Vec<db::DuplicateGroup>,
-) -> CmdResult<Vec<db::DuplicateEffect>> {
-    with_lib(&state, |lib| db::resolve_duplicates(&mut lib.conn, &groups).map_err(err))
 }
 
 #[tauri::command]
@@ -599,34 +551,8 @@ pub(crate) fn item_paths(state: &AppState, ids: &[String]) -> CmdResult<Vec<(Ite
 
 #[tauri::command]
 pub fn reveal_item(state: State<AppState>, id: String) -> CmdResult<()> {
-    let (_, path) = item_paths(&state, &[id])?.pop().ok_or("画像が見つかりません")?;
+    let (_, path) = item_paths(&state, &[id])?.pop().ok_or("フォントが見つかりません")?;
     tauri_plugin_opener::reveal_item_in_dir(path).map_err(err)
-}
-
-/// The codecs of a video, read from the file's headers (docs/VIDEO.md).
-#[tauri::command]
-pub fn video_codecs(state: State<AppState>, id: String) -> CmdResult<crate::videos::Codecs> {
-    let (item, path) = item_paths(&state, &[id])?.pop().ok_or("動画が見つかりません")?;
-    Ok(crate::videos::codecs(&path, &item.ext))
-}
-
-/// Gives the video `id` a thumbnail of the user's (docs/VIDEO.md); returns its file name.
-#[tauri::command]
-pub async fn set_video_thumb(app: AppHandle, id: String, source: crate::videos::thumb::Source) -> CmdResult<String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        with_lib(&app.state::<AppState>(), |lib| {
-            let img = crate::videos::thumb::picture(lib, &id, &source)?;
-            crate::videos::thumb::set(lib, &id, &img)
-        })
-    })
-    .await
-    .map_err(err)?
-}
-
-/// Puts the frame from the OS back as the video's thumbnail.
-#[tauri::command]
-pub fn reset_video_thumb(state: State<AppState>, id: String) -> CmdResult<()> {
-    with_lib(&state, |lib| crate::videos::thumb::reset(lib, &id))
 }
 
 /// Opens items in the OS default app.
@@ -654,33 +580,9 @@ pub fn set_pinned(state: State<AppState>, ids: Vec<String>, on: bool) -> CmdResu
     with_lib(&state, |lib| db::set_pinned(&lib.conn, &ids, on).map_err(err))
 }
 
-/// Rotates / flips without touching the files (see orient.rs). Runs off the
-/// main thread because thumbnails are re-rendered, and renders without
-/// holding the library, which every other command needs. Returns how many changed.
-#[tauri::command]
-pub async fn orient_items(app: AppHandle, ids: Vec<String>, op: crate::orient::OrientOp) -> CmdResult<usize> {
-    /// One at a time: each works from the orientation it read, and two quick
-    /// turns of the same images must add up.
-    static ORIENTING: Mutex<()> = Mutex::new(());
-    tauri::async_runtime::spawn_blocking(move || {
-        let _one = ORIENTING.lock().unwrap_or_else(|e| e.into_inner());
-        let state = app.state::<AppState>();
-        let job = with_lib(&state, |lib| import::OrientJob::plan(lib, &ids, op))?;
-        let rendered = job.render();
-        with_lib(&state, |lib| {
-            if lib.root != job.root() {
-                return Err("回転中に別のライブラリが開かれました".into());
-            }
-            job.commit(lib, rendered)
-        })
-    })
-    .await
-    .map_err(err)?
-}
-
 #[tauri::command]
 pub fn copy_items(state: State<AppState>, ids: Vec<String>) -> CmdResult<usize> {
-    use clipboard_rs::{common::RustImage, Clipboard, ClipboardContent, ClipboardContext, RustImageData};
+    use clipboard_rs::{Clipboard, ClipboardContent, ClipboardContext};
     let paths: Vec<String> = item_paths(&state, &ids)?
         .into_iter()
         .map(|(_, p)| p.display().to_string())
@@ -689,19 +591,13 @@ pub fn copy_items(state: State<AppState>, ids: Vec<String>) -> CmdResult<usize> 
         return Ok(0);
     }
     let ctx = ClipboardContext::new().map_err(err)?;
-    let mut contents = vec![ClipboardContent::Files(paths.clone())];
-    if paths.len() == 1 {
-        if let Ok(img) = RustImageData::from_path(&paths[0]) {
-            contents.push(ClipboardContent::Image(img));
-        }
-    }
-    ctx.set(contents).map_err(err)?;
+    ctx.set(vec![ClipboardContent::Files(paths.clone())]).map_err(err)?;
     Ok(paths.len())
 }
 
-// ------------------------------------------------------------ work tray
+// ---------------------------------------------------------------- shelf
 
-/// Puts items on the work tray (after the ones there); returns how many were new.
+/// Puts items on the shelf (after the ones there); returns how many were new.
 #[tauri::command]
 pub fn add_to_tray(state: State<AppState>, ids: Vec<String>) -> CmdResult<usize> {
     with_lib(&state, |lib| db::add_to_tray(&lib.conn, &ids).map_err(err))
@@ -712,7 +608,7 @@ pub fn remove_from_tray(state: State<AppState>, ids: Vec<String>) -> CmdResult<(
     with_lib(&state, |lib| db::remove_from_tray(&lib.conn, &ids).map_err(err))
 }
 
-/// Empties the tray; returns what was on it, in order (for undo).
+/// Empties the shelf; returns what was on it, in order (for undo).
 #[tauri::command]
 pub fn clear_tray(state: State<AppState>) -> CmdResult<Vec<String>> {
     with_lib(&state, |lib| db::clear_tray(&lib.conn).map_err(err))
@@ -721,61 +617,6 @@ pub fn clear_tray(state: State<AppState>) -> CmdResult<Vec<String>> {
 #[tauri::command]
 pub fn reorder_tray(state: State<AppState>, ids: Vec<String>, before: Option<String>) -> CmdResult<()> {
     with_lib(&state, |lib| db::reorder_tray(&mut lib.conn, &ids, before.as_deref()).map_err(err))
-}
-
-// -------------------------------------------------------- contact sheet
-
-/// One item for the contact sheet: oriented, fitted inside `max_side` px,
-/// as PNG or JPEG (sheet.rs). A font or file gives its thumbnail.
-#[tauri::command]
-pub async fn sheet_image(app: AppHandle, id: String, max_side: u32) -> CmdResult<tauri::ipc::Response> {
-    tauri::async_runtime::spawn_blocking(move || {
-        // Only look the paths up under the lock; decoding can take a while.
-        let (item, src) = with_lib(&app.state::<AppState>(), |lib| {
-            let item = db::get_items(&lib.conn, std::slice::from_ref(&id))
-                .map_err(err)?
-                .pop()
-                .ok_or("画像が見つかりません")?;
-            let src = crate::sheet::source_path(lib, &item);
-            Ok((item, src))
-        })?;
-        let bytes = fs::read(&src).map_err(err)?;
-        Ok(tauri::ipc::Response::new(crate::sheet::render(&item, &bytes, max_side)?))
-    })
-    .await
-    .map_err(err)?
-}
-
-/// Writes a file the frontend made (a contact sheet) to the path chosen in
-/// the save dialog, sent percent-encoded in `x-path`.
-#[tauri::command]
-pub fn save_file(request: tauri::ipc::Request<'_>) -> CmdResult<()> {
-    let tauri::ipc::InvokeBody::Raw(data) = request.body() else {
-        return Err("バイナリデータが必要です".into());
-    };
-    let path = request
-        .headers()
-        .get("x-path")
-        .and_then(|v| v.to_str().ok())
-        .map(percent_decode)
-        .map(PathBuf::from)
-        .ok_or("保存先がありません")?;
-    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
-    if !matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "html") {
-        return Err("PNG・JPEG・HTML 以外では保存できません".into());
-    }
-    fs::write(&path, data).map_err(err)
-}
-
-/// Puts an image (PNG / JPEG data) on the clipboard, to paste into chat or mail.
-#[tauri::command]
-pub fn copy_image(request: tauri::ipc::Request<'_>) -> CmdResult<()> {
-    use clipboard_rs::{common::RustImage, Clipboard, ClipboardContext, RustImageData};
-    let tauri::ipc::InvokeBody::Raw(data) = request.body() else {
-        return Err("バイナリデータが必要です".into());
-    };
-    let img = RustImageData::from_bytes(data).map_err(err)?;
-    ClipboardContext::new().map_err(err)?.set_image(img).map_err(err)
 }
 
 /// Brings the window up: minimized, hidden or behind other apps.
@@ -800,7 +641,7 @@ pub fn reveal_log(app: AppHandle) -> CmdResult<()> {
     }
 }
 
-/// Shows a file the app wrote (e.g. a saved contact sheet) in Finder / Explorer.
+/// Shows a file or folder the app wrote (e.g. an export) in Finder / Explorer.
 #[tauri::command]
 pub fn reveal_path(path: PathBuf) -> CmdResult<()> {
     tauri_plugin_opener::reveal_item_in_dir(path).map_err(err)
@@ -840,18 +681,7 @@ pub async fn import_paths(
     .map_err(err)?
 }
 
-/// Prepares the similar-images view: hashes items that predate the feature.
-/// Returns how many were hashed.
-#[tauri::command]
-pub async fn index_similar(app: AppHandle) -> CmdResult<usize> {
-    tauri::async_runtime::spawn_blocking(move || {
-        import::compute_missing_phashes(&app.state::<AppState>().lib)
-    })
-    .await
-    .map_err(err)?
-}
-
-/// Imports raw image bytes (clipboard paste). The file name and target
+/// Imports raw font bytes (clipboard paste). The file name and target
 /// folder are passed as headers so the body can stay binary.
 #[tauri::command]
 pub async fn import_bytes(app: AppHandle, request: tauri::ipc::Request<'_>) -> CmdResult<ImportSummary> {
@@ -865,7 +695,7 @@ pub async fn import_bytes(app: AppHandle, request: tauri::ipc::Request<'_>) -> C
             .and_then(|v| v.to_str().ok())
             .map(percent_decode)
     };
-    let name = header("x-name").unwrap_or_else(|| "pasted.png".into());
+    let name = header("x-name").unwrap_or_default();
     let folder_id = header("x-folder").filter(|s| !s.is_empty());
     let data = data.clone();
     tauri::async_runtime::spawn_blocking(move || {
@@ -897,10 +727,9 @@ pub(crate) fn percent_decode(s: &str) -> String {
     String::from_utf8_lossy(&out).into_owned()
 }
 
-/// Where this build's in-app updater looks for updates: the first of
-/// `plugins.updater.endpoints` in tauri.conf.json, or of the config a fork
-/// lays over it with `tauri build --config` (docs/LIMITS.md). The proxy lookup
-/// and the release page follow it, so a fork only sets the endpoint.
+/// Where the in-app updater looks for updates: the first of
+/// `plugins.updater.endpoints` in tauri.conf.json. The proxy lookup and the
+/// release page follow it.
 fn update_feed(app: &AppHandle) -> Option<String> {
     let updater = app.config().plugins.0.get("updater")?;
     updater.get("endpoints")?.get(0)?.as_str().map(str::to_owned)
@@ -920,23 +749,19 @@ pub async fn system_proxy(app: AppHandle) -> Option<String> {
 #[tauri::command]
 pub fn open_release_page(app: AppHandle, version: String) -> CmdResult<()> {
     let feed = update_feed(&app).unwrap_or_default();
-    let page = release_page(&feed, crate::limits::TAG_PREFIX, &version)?;
+    let page = release_page(&feed, &version)?;
     tauri_plugin_opener::open_url(page, None::<&str>).map_err(err)
 }
 
 /// The release page in the same repository as the update feed
-/// (`https://github.com/<owner>/<repo>/releases/...`), tagged
-/// `<prefix>v<version>` (`STOCKROOM_TAG_PREFIX`). Only a version goes into
-/// the URL, so the page can't be sent anywhere else. A feed outside GitHub
-/// Releases has no page to open.
-fn release_page(feed: &str, prefix: &str, version: &str) -> CmdResult<String> {
+/// (`https://github.com/<owner>/<repo>/releases/...`), tagged `v<version>`.
+/// Only a version goes into the URL, so the page can't be sent anywhere
+/// else. A feed outside GitHub Releases has no page to open.
+fn release_page(feed: &str, version: &str) -> CmdResult<String> {
     let version = version.strip_prefix('v').unwrap_or(version);
     let ok = !version.is_empty() && version.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '+'));
     if !ok {
         return Err(format!("not a version: {version}"));
-    }
-    if !prefix.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_')) {
-        return Err(format!("not a tag prefix: {prefix}"));
     }
     let repo = feed
         .strip_prefix("https://github.com/")
@@ -951,28 +776,25 @@ fn release_page(feed: &str, prefix: &str, version: &str) -> CmdResult<String> {
             };
             name_ok(parts.next()) && name_ok(parts.next()) && parts.next().is_none()
         })
-        .ok_or_else(|| "このビルドの更新の配信先には、更新内容のページがありません".to_string())?;
-    Ok(format!("https://github.com/{repo}/releases/tag/{prefix}v{version}"))
+        .ok_or_else(|| "更新の配信先には、更新内容のページがありません".to_string())?;
+    Ok(format!("https://github.com/{repo}/releases/tag/v{version}"))
 }
 
 #[tauri::command]
 pub fn supported_exts() -> Vec<&'static str> {
-    import::SUPPORTED_EXTS.iter().copied().filter(|e| crate::limits::accepts(e)).collect()
+    import::SUPPORTED_EXTS.to_vec()
 }
 
 // -------------------------------------------------------------- folders
 
 #[tauri::command]
-pub fn list_folders(state: State<AppState>, mode: Option<db::Mode>) -> CmdResult<Vec<Folder>> {
-    with_lib(&state, |lib| db::list_folders(&lib.conn, mode).map_err(err))
+pub fn list_folders(state: State<AppState>) -> CmdResult<Vec<Folder>> {
+    with_lib(&state, |lib| db::list_folders(&lib.conn).map_err(err))
 }
 
-/// A folder of `mode` (a subfolder is of its parent's).
 #[tauri::command]
-pub fn create_folder(state: State<AppState>, name: String, parent_id: Option<String>, mode: db::Mode) -> CmdResult<String> {
-    with_lib(&state, |lib| {
-        db::create_folder(&lib.conn, name.trim(), parent_id.as_deref(), mode).map_err(err)
-    })
+pub fn create_folder(state: State<AppState>, name: String, parent_id: Option<String>) -> CmdResult<String> {
+    with_lib(&state, |lib| db::create_folder(&lib.conn, name.trim(), parent_id.as_deref()).map_err(err))
 }
 
 #[tauri::command]
@@ -999,62 +821,6 @@ pub fn move_to_folder(state: State<AppState>, ids: Vec<String>, folder_id: Strin
     with_lib(&state, |lib| db::move_to_folder(&lib.conn, &ids, &folder_id).map_err(err))
 }
 
-// ---------------------------------------------------------------- links (docs/LINKS.md)
-
-/// Makes `ids` children of `parent_id`, moving them to its folder. Returns where they
-/// stood, for the undo (`restore_links`).
-#[tauri::command]
-pub fn link_items(state: State<AppState>, parent_id: String, ids: Vec<String>) -> CmdResult<Vec<db::Placement>> {
-    with_lib(&state, |lib| {
-        if !db::links_enabled(&lib.conn).map_err(err)? {
-            return Err("親子関係が無効です。設定で有効にしてください。".into());
-        }
-        db::link_items(&lib.conn, &parent_id, &ids).map_err(err)
-    })
-}
-
-/// Takes `ids` out of their parents; returns what they were, for the undo.
-#[tauri::command]
-pub fn unlink_items(state: State<AppState>, ids: Vec<String>) -> CmdResult<Vec<db::Placement>> {
-    with_lib(&state, |lib| db::unlink_items(&lib.conn, &ids).map_err(err))
-}
-
-/// Makes the child `id` the parent of its family: its parent and the other
-/// children go under it. Returns where they all stood, for the undo.
-#[tauri::command]
-pub fn make_parent(state: State<AppState>, id: String) -> CmdResult<Vec<db::Placement>> {
-    with_lib(&state, |lib| {
-        if !db::links_enabled(&lib.conn).map_err(err)? {
-            return Err("親子関係が無効です。設定で有効にしてください。".into());
-        }
-        db::make_parent(&lib.conn, &id).map_err(err)
-    })
-}
-
-/// Puts children back as `link_items` / `unlink_items` found them.
-#[tauri::command]
-pub fn restore_links(state: State<AppState>, placements: Vec<db::Placement>) -> CmdResult<()> {
-    with_lib(&state, |lib| db::restore_links(&lib.conn, &placements).map_err(err))
-}
-
-/// Picks (or unpicks) a child as the adopted one of its parent's children.
-#[tauri::command]
-pub fn set_adopted(state: State<AppState>, id: String, on: bool) -> CmdResult<()> {
-    with_lib(&state, |lib| db::set_adopted(&lib.conn, &id, on).map_err(err))
-}
-
-/// How many links the library has (the confirmation for turning links off).
-#[tauri::command]
-pub fn count_links(state: State<AppState>) -> CmdResult<i64> {
-    with_lib(&state, |lib| db::count_links(&lib.conn).map_err(err))
-}
-
-/// Turns links on or off; off removes them all and returns how many.
-#[tauri::command]
-pub fn set_links_enabled(state: State<AppState>, on: bool) -> CmdResult<i64> {
-    with_lib(&state, |lib| db::set_links_enabled(&lib.conn, on).map_err(err))
-}
-
 /// Drops a folder under `parent_id`, in front of sibling `before` (None = last).
 #[tauri::command]
 pub fn place_folder(
@@ -1075,20 +841,20 @@ pub fn shift_folder(state: State<AppState>, id: String, by: i32) -> CmdResult<()
 }
 
 #[tauri::command]
-pub fn sort_folders_by_name(state: State<AppState>, parent_id: Option<String>, mode: db::Mode) -> CmdResult<()> {
-    with_lib(&state, |lib| db::sort_folders_by_name(&mut lib.conn, parent_id.as_deref(), mode).map_err(err))
+pub fn sort_folders_by_name(state: State<AppState>, parent_id: Option<String>) -> CmdResult<()> {
+    with_lib(&state, |lib| db::sort_folders_by_name(&mut lib.conn, parent_id.as_deref()).map_err(err))
 }
 
 // -------------------------------------------------------- smart folders
 
 #[tauri::command]
-pub fn list_smart_folders(state: State<AppState>, mode: Option<db::Mode>) -> CmdResult<Vec<db::SmartFolder>> {
-    with_lib(&state, |lib| db::list_smart_folders(&lib.conn, mode).map_err(err))
+pub fn list_smart_folders(state: State<AppState>) -> CmdResult<Vec<db::SmartFolder>> {
+    with_lib(&state, |lib| db::list_smart_folders(&lib.conn).map_err(err))
 }
 
 #[tauri::command]
-pub fn create_smart_folder(state: State<AppState>, name: String, rule: db::Rule, mode: db::Mode) -> CmdResult<String> {
-    with_lib(&state, |lib| db::create_smart_folder(&lib.conn, name.trim(), &rule, mode).map_err(err))
+pub fn create_smart_folder(state: State<AppState>, name: String, rule: db::Rule) -> CmdResult<String> {
+    with_lib(&state, |lib| db::create_smart_folder(&lib.conn, name.trim(), &rule).map_err(err))
 }
 
 #[tauri::command]
@@ -1110,8 +876,8 @@ pub fn delete_smart_folder(state: State<AppState>, id: String) -> CmdResult<()> 
 }
 
 #[tauri::command]
-pub fn list_exts(state: State<AppState>, mode: Option<db::Mode>) -> CmdResult<Vec<(String, i64)>> {
-    with_lib(&state, |lib| db::list_exts(&lib.conn, mode).map_err(err))
+pub fn list_exts(state: State<AppState>) -> CmdResult<Vec<(String, i64)>> {
+    with_lib(&state, |lib| db::list_exts(&lib.conn).map_err(err))
 }
 
 #[tauri::command]
@@ -1134,8 +900,8 @@ pub fn remove_from_folder(state: State<AppState>, ids: Vec<String>, folder_id: S
 // ----------------------------------------------------------------- tags
 
 #[tauri::command]
-pub fn list_tags(state: State<AppState>, mode: Option<db::Mode>) -> CmdResult<Vec<Tag>> {
-    with_lib(&state, |lib| db::list_tags(&lib.conn, mode).map_err(err))
+pub fn list_tags(state: State<AppState>) -> CmdResult<Vec<Tag>> {
+    with_lib(&state, |lib| db::list_tags(&lib.conn).map_err(err))
 }
 
 #[tauri::command]
@@ -1183,51 +949,40 @@ pub fn delete_tag(state: State<AppState>, id: i64) -> CmdResult<()> {
 mod tests {
     #[test]
     fn percent_decode_utf8() {
-        assert_eq!(super::percent_decode("%E7%94%BB%E5%83%8F.png"), "画像.png");
+        assert_eq!(super::percent_decode("%E6%98%8E%E6%9C%9D.otf"), "明朝.otf");
         assert_eq!(super::percent_decode("a%2"), "a%2");
         assert_eq!(super::percent_decode("%aあ"), "%aあ");
     }
 
     #[test]
     fn release_page_takes_only_a_version() {
-        let feed = "https://github.com/hamirilo/stockroom/releases/latest/download/latest.json";
-        let page = "https://github.com/hamirilo/stockroom/releases/tag/v0.28.0";
-        assert_eq!(super::release_page(feed, "", "0.28.0").unwrap(), page);
-        assert_eq!(super::release_page(feed, "", "v0.28.0").unwrap(), page);
-        assert!(super::release_page(feed, "", "1.0.0-beta.1").is_ok());
-        assert!(super::release_page(feed, "", "").is_err());
-        assert!(super::release_page(feed, "", "0.28.0/../../evil").is_err());
-        assert!(super::release_page(feed, "", "0.28.0?x=1").is_err());
+        let feed = "https://github.com/hamirilo/typecase/releases/latest/download/latest.json";
+        let page = "https://github.com/hamirilo/typecase/releases/tag/v0.28.0";
+        assert_eq!(super::release_page(feed, "0.28.0").unwrap(), page);
+        assert_eq!(super::release_page(feed, "v0.28.0").unwrap(), page);
+        assert!(super::release_page(feed, "1.0.0-beta.1").is_ok());
+        assert!(super::release_page(feed, "").is_err());
+        assert!(super::release_page(feed, "0.28.0/../../evil").is_err());
+        assert!(super::release_page(feed, "0.28.0?x=1").is_err());
     }
 
     #[test]
     fn release_page_follows_the_update_feed() {
-        let fork = "https://github.com/someone/stockroom-fork/releases/latest/download/latest.json";
+        let fork = "https://github.com/someone/typecase-fork/releases/latest/download/latest.json";
         assert_eq!(
-            super::release_page(fork, "", "1.2.3").unwrap(),
-            "https://github.com/someone/stockroom-fork/releases/tag/v1.2.3"
+            super::release_page(fork, "1.2.3").unwrap(),
+            "https://github.com/someone/typecase-fork/releases/tag/v1.2.3"
         );
         // Not GitHub Releases, or no feed at all: no page.
-        assert!(super::release_page("https://updates.example.com/stockroom/latest.json", "", "1.2.3").is_err());
-        assert!(super::release_page("", "", "1.2.3").is_err());
-        assert!(super::release_page("https://github.com/a/b/c/releases/latest/download/latest.json", "", "1.2.3").is_err());
-    }
-
-    #[test]
-    fn release_page_uses_the_tag_prefix() {
-        let fork = "https://github.com/someone/stockroom-fork/releases/latest/download/latest.json";
-        assert_eq!(
-            super::release_page(fork, "corp-", "1.2.3").unwrap(),
-            "https://github.com/someone/stockroom-fork/releases/tag/corp-v1.2.3"
-        );
-        assert!(super::release_page(fork, "../x", "1.2.3").is_err());
-        assert!(super::release_page(fork, "a?b=", "1.2.3").is_err());
+        assert!(super::release_page("https://updates.example.com/typecase/latest.json", "1.2.3").is_err());
+        assert!(super::release_page("", "1.2.3").is_err());
+        assert!(super::release_page("https://github.com/a/b/c/releases/latest/download/latest.json", "1.2.3").is_err());
     }
 
     #[test]
     fn the_shipped_config_has_an_update_feed() {
         let conf: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
         let feed = conf["plugins"]["updater"]["endpoints"][0].as_str().unwrap();
-        assert!(super::release_page(feed, "", "1.0.0").is_ok(), "{feed}");
+        assert!(super::release_page(feed, "1.0.0").is_ok(), "{feed}");
     }
 }

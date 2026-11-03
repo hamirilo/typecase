@@ -1,7 +1,7 @@
-//! Fonts installed on this computer (docs/SYSTEM_FONTS.md): listed in the
-//! font mode next to the library's fonts, read only. They are never imported
+//! Fonts installed on this computer (docs/SYSTEM_FONTS.md): listed next to
+//! the library's fonts, read only. They are never imported
 //! and never stored in the library: the list is read from the OS's font
-//! folders (the same ones SVG text is drawn with, `formats::svg_options`).
+//! folders (the ones resvg's font database finds).
 //!
 //! Reading every font file takes a while (a Mac has a few gigabytes of them),
 //! so what was read is kept in a cache file in the app's cache folder and only
@@ -29,7 +29,7 @@ const CACHE_VERSION: u32 = 2;
 const CACHE_FILE: &str = "system-fonts.json";
 
 /// One font file installed on this computer (a collection is one entry, like
-/// a library item). What the font mode lists, filters and groups it by.
+/// a library item). What the list shows, filters and groups it by.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SystemFont {
@@ -138,7 +138,7 @@ fn stat(path: &Path) -> Option<(u64, i64)> {
 /// Reads one installed font; None when it isn't a font this app can read.
 fn read_font(path: &Path, size: u64, modified: i64) -> Option<SystemFont> {
     let ext = ext_of(path);
-    if !crate::formats::is_font(&ext) {
+    if !crate::import::SUPPORTED_EXTS.contains(&ext.as_str()) {
         return None;
     }
     let sfnt = to_sfnt(&std::fs::read(path).ok()?, &ext).ok()?;

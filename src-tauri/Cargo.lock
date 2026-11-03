@@ -718,12 +718,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "core_detect"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f8f80099a98041a3d1622845c271458a2d73e688351bf3cb999266764b81d48"
-
-[[package]]
 name = "cpufeatures"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1147,20 +1141,6 @@ name = "embed_plist"
 version = "1.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4ef6b89e5b37196644d8796de5268852ff179b44e96276cf4290264843743bb7"
-
-[[package]]
-name = "encoding_rs"
-version = "0.8.42"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e985e0451871ad22fb8d2b6b076e2028a502a0d3950998c2c5c0a4f9b5d9679"
-dependencies = [
- "cfg-if",
- "core_detect",
- "multiversion_no_op",
- "rustversion",
- "scopeguard",
- "simdutf8",
-]
 
 [[package]]
 name = "endi"
@@ -2189,9 +2169,6 @@ checksum = "85ab80394333c02fe689eaf900ab500fbd0c2213da414687ebf995a65d5a6104"
 dependencies = [
  "bytemuck",
  "byteorder-lite",
- "color_quant",
- "gif",
- "image-webp",
  "moxcms",
  "num-traits",
  "png 0.18.1",
@@ -2703,12 +2680,6 @@ dependencies = [
  "thiserror 2.0.21",
  "windows-sys 0.61.2",
 ]
-
-[[package]]
-name = "multiversion_no_op"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "743fb55ba31b18fb1ecef6bdc9aa2743314978ac084044301a7eee33fb99a20d"
 
 [[package]]
 name = "ndk"
@@ -5369,11 +5340,9 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 name = "typecase"
 version = "0.1.0"
 dependencies = [
- "base64 0.22.1",
  "brotli 7.0.0",
  "clipboard-rs",
  "core-foundation-sys",
- "encoding_rs",
  "flate2",
  "hex",
  "image",
@@ -5401,7 +5370,6 @@ dependencies = [
  "walkdir",
  "windows 0.62.2",
  "woff2-patched",
- "zip",
 ]
 
 [[package]]
@@ -6714,7 +6682,6 @@ checksum = "caa8cd6af31c3b31c6631b8f483848b91589021b28fffe50adada48d4f4d2ed1"
 dependencies = [
  "arbitrary",
  "crc32fast",
- "flate2",
  "indexmap 2.14.2",
  "memchr",
 ]

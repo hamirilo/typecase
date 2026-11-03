@@ -1,21 +1,12 @@
-pub mod bookmarks;
 pub mod commands;
 pub mod db;
 pub mod export;
-pub mod files;
 pub mod fonts;
-pub mod formats;
 pub mod import;
 pub mod library;
-pub mod limits;
-pub mod orient;
 pub mod proxy;
 pub mod search;
-pub mod sheet;
-pub mod similar;
-pub mod texts;
 pub mod transfer;
-pub mod videos;
 
 use commands::*;
 
@@ -103,10 +94,7 @@ pub fn run() {
         .manage(AppState::default())
         .setup(|app| {
             log_panics();
-            // A build without in-app updates doesn't load the updater (limits.rs).
-            if !limits::NO_UPDATE {
-                app.handle().plugin(tauri_plugin_updater::Builder::new().build())?;
-            }
+            app.handle().plugin(tauri_plugin_updater::Builder::new().build())?;
             main_window(app.handle())?;
             log::info!(
                 "{} {} ({} {})",
@@ -142,12 +130,10 @@ pub fn run() {
             delete_items,
             empty_trash,
             reveal_item,
-            video_codecs,
             open_items,
             set_rating,
             set_favorite,
             set_pinned,
-            orient_items,
             system_proxy,
             open_release_page,
             fonts::commands::font_info,
@@ -161,12 +147,6 @@ pub fn run() {
             fonts::commands::add_system_to_tray,
             fonts::commands::system_tray,
             fonts::commands::library_font_ps_names,
-            files::commands::file_preview,
-            files::commands::prepare_file_thumbs,
-            texts::commands::read_text,
-            texts::commands::save_text,
-            texts::commands::create_text,
-            bookmarks::commands::create_bookmark,
             copy_items,
             export::export_items,
             export::export_library,
@@ -175,9 +155,6 @@ pub fn run() {
             remove_from_tray,
             clear_tray,
             reorder_tray,
-            sheet_image,
-            save_file,
-            copy_image,
             reveal_path,
             reveal_log,
             reorder_in_folder,
@@ -191,13 +168,6 @@ pub fn run() {
             list_exts,
             import_paths,
             import_bytes,
-            index_similar,
-            dismiss_duplicates,
-            undismiss_duplicates,
-            clear_dismissed_duplicates,
-            count_dismissed_duplicates,
-            preview_duplicates,
-            resolve_duplicates,
             supported_exts,
             list_folders,
             create_folder,
@@ -205,15 +175,6 @@ pub fn run() {
             delete_folder,
             move_folder,
             move_to_folder,
-            link_items,
-            unlink_items,
-            make_parent,
-            set_video_thumb,
-            reset_video_thumb,
-            restore_links,
-            count_links,
-            set_links_enabled,
-            set_adopted,
             remove_from_folder,
             list_tags,
             add_tags,

@@ -25,7 +25,8 @@ tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rusqlite = { version = "0.40.2", features = ["bundled"] }
-image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "gif", "webp", "bmp", "tiff"] }
+# The rendered sample (fonts/mod.rs `render_thumb`) as the thumbnail.
+image = { version = "0.25.10", default-features = false, features = ["png"] }
 sha2 = "0.11.0"
 rayon = "1.12.0"
 walkdir = "2.5.0"
@@ -41,14 +42,8 @@ woff2-patched = "0.4"
 # Checking a WOFF2 file's sizes before woff2-patched unpacks it (fonts/mod.rs).
 brotli = { version = "7", default-features = false, features = ["std"] }
 flate2 = "1"
-tempfile = "3.27.0"
-base64 = "0.22"
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
-# Texts: reading and writing Shift_JIS (CSV from Excel and in-house systems), texts/mod.rs.
-encoding_rs = "0.8"
-# Files: the preview inside iWork / Office files (files/mod.rs). Reading only.
-zip = { version = "4", default-features = false, features = ["deflate-flate2"] }
 # The window opens at the size and place it had when last closed.
 tauri-plugin-window-state = "2"
 # A second launch brings up the running app's window instead (lib.rs).
@@ -72,9 +67,10 @@ panic = "abort"
 strip = true
 
 [dev-dependencies]
+tempfile = "3.27.0"
 
 [target."cfg(windows)".dependencies]
-windows = { version = "0.62", features = ["Win32_Graphics_Imaging", "Win32_System_Com", "Win32_Foundation", "Win32_Networking_WinHttp", "Data_Pdf", "Storage_Streams"] }
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Networking_WinHttp"] }
 
 # System proxy lookup (PAC) for the updater, see proxy.rs.
 [target."cfg(target_os = \"macos\")".dependencies]

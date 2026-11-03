@@ -1,10 +1,7 @@
 //! A library is a self-contained folder:
 //!   <name>.library/library.db
-//!   <name>.library/images/<item id>/<file name>
-//!   <name>.library/thumbs/<item id>.jpg|png
-//!   <name>.library/thumbs/<item id>_o<flip><turns>.jpg|png  (rotated, see orient.rs)
-//!   <name>.library/previews/<item id>.jpg  (display copy, HEIC / TIFF)
-//!   <name>.library/previews/<item id>.pdf|.qlpreview/  (documents, see files/preview.rs)
+//!   <name>.library/fonts/<item id>/<file name>
+//!   <name>.library/thumbs/<item id>.png|jpg  (the rendered sample, see fonts/mod.rs)
 //!   <name>.library/library.lock   while the app has it open (see `Holder`)
 //!
 //! A library folder may be synced by Dropbox / OneDrive / iCloud Drive. Two
@@ -20,9 +17,8 @@ use std::path::{Path, PathBuf};
 
 pub const DB_FILE: &str = "library.db";
 pub const LOCK_FILE: &str = "library.lock";
-/// Where the items' files are kept, one folder per item. Named before there
-/// were other kinds than images; kept so existing libraries open as they are.
-const FILES_DIR: &str = "images";
+/// Where the items' files are kept, one folder per item.
+const FILES_DIR: &str = "fonts";
 
 /// How often an open library's lock is refreshed (ms).
 pub const LOCK_REFRESH_MS: u64 = 2 * 60 * 1000;
@@ -113,7 +109,6 @@ impl Library {
     fn load(root: &Path) -> Result<Self, String> {
         fs::create_dir_all(root.join(FILES_DIR)).map_err(|e| e.to_string())?;
         fs::create_dir_all(root.join("thumbs")).map_err(|e| e.to_string())?;
-        fs::create_dir_all(root.join("previews")).map_err(|e| e.to_string())?;
         let conn = db::open(&root.join(DB_FILE)).map_err(|e| e.to_string())?;
         Ok(Self { root: root.to_path_buf(), conn, lock: None })
     }
@@ -144,11 +139,6 @@ impl Library {
         thumb_path(&self.root, item)
     }
 
-    /// What the viewer shows: the JPEG display copy if there is one.
-    pub fn display_path(&self, item: &Item) -> PathBuf {
-        display_path(&self.root, item)
-    }
-
     /// Permanently deletes items (rows and files).
     pub fn delete_items(&self, ids: &[String]) -> Result<(), String> {
         let removed = self.delete_rows(ids)?;
@@ -171,7 +161,7 @@ pub fn file_path(root: &Path, item: &Item) -> PathBuf {
     stored_file(root, &item.id, &item.file_name)
 }
 
-/// The folder that holds only the item `id`'s file (`images/<id>`).
+/// The folder that holds only the item `id`'s file (`fonts/<id>`).
 pub fn item_dir(root: &Path, id: &str) -> PathBuf {
     root.join(FILES_DIR).join(id)
 }
@@ -191,15 +181,6 @@ pub fn store_file(root: &Path, id: &str, file_name: &str, data: &[u8]) -> Result
     Ok(path)
 }
 
-/// `store_file` for a file on the disk, copied without reading it into memory.
-pub fn copy_file(root: &Path, id: &str, file_name: &str, from: &Path) -> Result<PathBuf, String> {
-    let dir = item_dir(root, id);
-    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let path = dir.join(file_name);
-    fs::copy(from, &path).map_err(|e| e.to_string())?;
-    Ok(path)
-}
-
 /// Removes the item `id`'s file (its whole folder). Missing is fine.
 pub fn remove_item_dir(root: &Path, id: &str) {
     let _ = fs::remove_dir_all(item_dir(root, id));
@@ -209,26 +190,11 @@ pub fn thumb_path(root: &Path, item: &Item) -> PathBuf {
     root.join("thumbs").join(&item.thumb)
 }
 
-pub fn display_path(root: &Path, item: &Item) -> PathBuf {
-    match &item.preview {
-        Some(p) => root.join("previews").join(p),
-        None => file_path(root, item),
-    }
-}
-
 /// Removes the files of deleted items (`Library::delete_rows`).
 pub fn remove_files(root: &Path, removed: &[Item]) {
     for item in removed {
         remove_item_dir(root, &item.id);
         let _ = fs::remove_file(thumb_path(root, item));
-        // The unrotated thumbnail is kept next to a rotated one, a video's frame next to its own.
-        for t in crate::videos::thumb::other_thumbs(item) {
-            let _ = fs::remove_file(root.join("thumbs").join(t));
-        }
-        if let Some(p) = &item.preview {
-            let _ = fs::remove_file(root.join("previews").join(p));
-        }
-        crate::files::preview::remove(&root.join("previews"), &item.id);
     }
 }
 
@@ -319,10 +285,9 @@ mod tests {
     fn item_files() {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path();
-        let path = store_file(root, "abc", "cat.png", b"x").unwrap();
-        // The layout existing libraries have.
-        assert_eq!(path, root.join("images").join("abc").join("cat.png"));
-        assert_eq!(stored_file(root, "abc", "cat.png"), path);
+        let path = store_file(root, "abc", "Sans.ttf", b"x").unwrap();
+        assert_eq!(path, root.join("fonts").join("abc").join("Sans.ttf"));
+        assert_eq!(stored_file(root, "abc", "Sans.ttf"), path);
         assert_eq!(fs::read(&path).unwrap(), b"x");
         remove_item_dir(root, "abc");
         assert!(!item_dir(root, "abc").exists());

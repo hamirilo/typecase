@@ -1,6 +1,6 @@
 //! Font files (TTF / OTF / WOFF / WOFF2 / TTC / OTC): unpacking to plain
 //! OpenType data, names and character lists, and a rendered sample used as
-//! the thumbnail. The original file is stored as is, like images.
+//! the thumbnail. The original file is stored as is.
 
 pub mod commands;
 pub mod system;
@@ -794,6 +794,13 @@ pub mod tests {
         "/System/Library/Fonts/Supplemental/Arial.ttf",
         "/System/Library/Fonts/Geneva.ttf",
         "C:\\Windows\\Fonts\\arial.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    ];
+    /// Another single font than `SINGLE`'s.
+    pub const OTHER: &[&str] = &[
+        "/System/Library/Fonts/Supplemental/Georgia.ttf",
+        "C:\\Windows\\Fonts\\georgia.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf",
     ];
     pub const VARIABLE: &[&str] = &[
         "/System/Library/Fonts/SFNS.ttf",

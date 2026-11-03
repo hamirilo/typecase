@@ -1,6 +1,5 @@
 //! Copying / moving items into another library, with what the user added to
-//! them: name, note, rating, favourite, pin, rotation, source URL, font
-//! metadata, tags (matched by name) and the folder they are in (the folder
+//! them: name, note, rating, favourite, pin, font metadata, tags (matched by name) and the folder they are in (the folder
 //! path is recreated by name). Files are copied, never hard-linked, so the
 //! libraries stay independent.
 //!
@@ -11,7 +10,7 @@ use crate::db::{self, Item};
 use crate::library::{self, Library, DB_FILE};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::Serialize;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -26,9 +25,6 @@ pub struct TransferSummary {
     pub duplicates: usize,
     /// "<name>: <reason>" for items that couldn't be copied.
     pub failed: Vec<String>,
-    /// Items that arrived (copied or already there) of kinds the destination
-    /// isn't used for (its `modes` setting), by kind.
-    pub unused_kinds: BTreeMap<db::Kind, usize>,
     /// Source items that are now in the destination (copied or already there).
     /// The ones to take out of the source when moving.
     #[serde(skip)]
@@ -52,8 +48,7 @@ pub struct Source {
 impl Source {
     pub fn read(lib: &Library, ids: &[String]) -> Result<Self, String> {
         let e = |e: rusqlite::Error| e.to_string();
-        // A parent travels with its children (docs/LINKS.md).
-        let items = db::get_items(&lib.conn, &db::with_children(&lib.conn, ids).map_err(e)?).map_err(e)?;
+        let items = db::get_items(&lib.conn, ids).map_err(e)?;
         let mut stmt = lib.conn.prepare("SELECT id, parent_id, name, color FROM folders").map_err(e)?;
         let folders = stmt
             .query_map([], |r| Ok((r.get(0)?, (r.get(1)?, r.get(2)?, r.get(3)?))))
@@ -120,16 +115,10 @@ fn copy_files(src: &Path, dst: &Path, item: &Item) -> Result<Vec<PathBuf>, Strin
     let dir = library::item_dir(dst, &item.id);
     copy_dir(&library::item_dir(src, &item.id), &dir).map_err(|e| e.to_string())?;
     written.push(dir);
-    // Thumbnails and the display copy can be made again; a missing one is fine.
-    let mut extra = vec![Path::new("thumbs").join(&item.thumb)];
-    extra.extend(crate::videos::thumb::other_thumbs(item).into_iter().map(|t| Path::new("thumbs").join(t)));
-    if let Some(p) = &item.preview {
-        extra.push(Path::new("previews").join(p));
-    }
-    for rel in extra {
-        if src.join(&rel).is_file() && !dst.join(&rel).exists() && fs::copy(src.join(&rel), dst.join(&rel)).is_ok() {
-            written.push(dst.join(rel));
-        }
+    // The thumbnail can be made again; a missing one is fine.
+    let rel = Path::new("thumbs").join(&item.thumb);
+    if src.join(&rel).is_file() && !dst.join(&rel).exists() && fs::copy(src.join(&rel), dst.join(&rel)).is_ok() {
+        written.push(dst.join(rel));
     }
     Ok(written)
 }
@@ -169,8 +158,7 @@ fn copy_attached(
     let cols = columns(&lib.conn, "main")
         .map_err(e)?
         .into_iter()
-        // Links are made again below, in the destination's own terms (docs/LINKS.md).
-        .filter(|c| theirs.contains(c) && c != "parent_id" && c != "adopted")
+        .filter(|c| theirs.contains(c))
         .collect::<Vec<_>>()
         .join(", ");
     let insert = format!("INSERT INTO main.items ({cols}) SELECT {cols} FROM src.items WHERE id = ?1");
@@ -178,8 +166,6 @@ fn copy_attached(
     let mut summary = TransferSummary::default();
     // Source folder id -> destination folder id.
     let mut folder_map: HashMap<String, String> = HashMap::new();
-    // Source item id -> its id in the destination (the same, unless the file was already there).
-    let mut target_of: HashMap<String, String> = HashMap::new();
     let total = src.items.len();
     for (n, item) in src.items.iter().enumerate() {
         progress(n, total);
@@ -227,11 +213,9 @@ fn copy_attached(
                     )?;
                 }
             }
-            // The destination's tags and folders of the item's mode (docs/MODES.md).
-            let mode = db::Mode::of(item.kind);
             for tag in &item.tag_ids {
                 let Some((name, color)) = src.tags.get(tag) else { continue };
-                let tag_id = db::ensure_tag(&tx, name, mode)?;
+                let tag_id = db::ensure_tag(&tx, name)?;
                 tx.execute("UPDATE main.tags SET color = ?2 WHERE id = ?1 AND color IS NULL", params![tag_id, color])?;
                 tx.execute(
                     "INSERT OR IGNORE INTO main.item_tags (item_id, tag_id) VALUES (?1, ?2)",
@@ -244,7 +228,7 @@ fn copy_attached(
                     None => {
                         let mut parent: Option<String> = None;
                         for (name, color) in src.folder_path(fid) {
-                            let id = db::find_or_create_folder(&tx, parent.as_deref(), name, mode)?;
+                            let id = db::find_or_create_folder(&tx, parent.as_deref(), name)?;
                             tx.execute(
                                 "UPDATE main.folders SET color = ?2 WHERE id = ?1 AND color IS NULL",
                                 params![id, color],
@@ -269,7 +253,6 @@ fn copy_attached(
                     summary.copied += 1;
                 }
                 summary.done_ids.push(item.id.clone());
-                target_of.insert(item.id.clone(), target);
             }
             Err(err) => {
                 remove_written(&written);
@@ -277,28 +260,7 @@ fn copy_attached(
             }
         }
     }
-    // Parents and children that arrived together are linked again, where the destination uses links.
-    if db::links_enabled(&lib.conn).map_err(e)? {
-        for item in &src.items {
-            let (Some(parent), Some(child)) =
-                (item.parent_id.as_ref().and_then(|p| target_of.get(p)), target_of.get(&item.id))
-            else {
-                continue;
-            };
-            db::link_items(&lib.conn, parent, std::slice::from_ref(child)).map_err(e)?;
-            if item.adopted {
-                db::set_adopted(&lib.conn, child, true).map_err(e)?;
-            }
-        }
-    }
     progress(total, total);
-    if let Some(used) = db::used_kinds(&lib.conn).map_err(e)? {
-        for item in src.items.iter().filter(|i| summary.done_ids.contains(&i.id)) {
-            if !used.contains(&item.kind) {
-                *summary.unused_kinds.entry(item.kind).or_default() += 1;
-            }
-        }
-    }
     Ok(summary)
 }
 
@@ -326,26 +288,28 @@ mod tests {
     use crate::db::{ItemQuery, NewItem};
 
     fn add(lib: &Library, id: &str, hash: &str) {
-        library::store_file(&lib.root, id, "a.png", hash.as_bytes()).unwrap();
-        fs::write(lib.root.join("thumbs").join(format!("{id}.jpg")), "t").unwrap();
+        library::store_file(&lib.root, id, "a.ttf", hash.as_bytes()).unwrap();
+        fs::write(lib.root.join("thumbs").join(format!("{id}.png")), "t").unwrap();
         let mut conn = db::open(&lib.root.join(DB_FILE)).unwrap();
         let tx = conn.transaction().unwrap();
         let it = NewItem {
             id: id.into(),
-            kind: db::Kind::Image,
             name: format!("name-{id}"),
-            file_name: "a.png".into(),
-            ext: "png".into(),
-            width: 10,
-            height: 10,
+            file_name: "a.ttf".into(),
+            ext: "ttf".into(),
             size: 1,
             hash: hash.into(),
-            thumb: format!("{id}.jpg"),
-            phash: None,
-            preview: None,
-            font: None,
-            body: None,
-            duration_ms: None,
+            thumb: format!("{id}.png"),
+            font: crate::fonts::FontMeta {
+                family: "F".into(),
+                weight: 400,
+                weight_min: 400,
+                weight_max: 400,
+                script: "latin",
+                category: None,
+                features: vec![],
+                ps_name: String::new(),
+            },
         };
         db::insert_item(&tx, &it, 1).unwrap();
         tx.commit().unwrap();
@@ -378,21 +342,6 @@ mod tests {
     }
 
     #[test]
-    fn reports_kinds_the_destination_is_not_used_for() {
-        let tmp = tempfile::tempdir().unwrap();
-        let a = Library::create(&tmp.path().join("A.library")).unwrap();
-        let b_root = tmp.path().join("B.library");
-        let b = Library::create(&b_root).unwrap();
-        db::set_library_setting(&b.conn, "modes", Some(&serde_json::json!(["font"]))).unwrap();
-        drop(b);
-        add(&a, "i1", "h1");
-        add(&a, "i2", "h2");
-        let src = Source::read(&a, &["i1".into(), "i2".into()]).unwrap();
-        let sum = copy_into(&src, &b_root, |_, _| {}).unwrap();
-        assert_eq!(sum.unused_kinds, BTreeMap::from([(db::Kind::Image, 2)]));
-    }
-
-    #[test]
     fn copies_rows_files_tags_and_folders() {
         let tmp = tempfile::tempdir().unwrap();
         let mut a = Library::create(&tmp.path().join("A.library")).unwrap();
@@ -402,8 +351,8 @@ mod tests {
         add(&a, "i2", "h2");
         add(&b, "x2", "h2"); // already in B under another id
 
-        let parent = db::create_folder(&a.conn, "Work", None, db::Mode::Stock).unwrap();
-        let child = db::create_folder(&a.conn, "Logos", Some(&parent), db::Mode::Stock).unwrap();
+        let parent = db::create_folder(&a.conn, "Work", None).unwrap();
+        let child = db::create_folder(&a.conn, "Logos", Some(&parent)).unwrap();
         db::set_color(&a.conn, db::ColorTarget::Folder, &child, Some("red")).unwrap();
         db::move_to_folder(&a.conn, &["i1".into(), "i2".into()], &child).unwrap();
         db::add_tags(&mut a.conn, &["i1".into(), "i2".into()], &["brand".into()]).unwrap();
@@ -415,12 +364,10 @@ mod tests {
         let sum = copy_into(&src, &b_root, |_, _| {}).unwrap();
         assert_eq!((sum.copied, sum.duplicates, sum.failed.len()), (1, 1, 0));
         assert_eq!(sum.done_ids, vec!["i1".to_string(), "i2".to_string()]);
-        // B is used for every kind (no `modes` setting).
-        assert!(sum.unused_kinds.is_empty());
 
         b = Library::open(&b_root).unwrap();
-        assert!(b_root.join("images/i1/a.png").is_file());
-        assert!(b_root.join("thumbs/i1.jpg").is_file());
+        assert!(b_root.join("fonts/i1/a.ttf").is_file());
+        assert!(b_root.join("thumbs/i1.png").is_file());
         let items = all(&b);
         assert_eq!(items.len(), 2);
         let i1 = items.iter().find(|i| i.id == "i1").unwrap();
@@ -428,12 +375,12 @@ mod tests {
         let x2 = items.iter().find(|i| i.id == "x2").unwrap();
         assert!(x2.favorite, "merged into the existing copy");
         assert_eq!(i1.folder_id, x2.folder_id);
-        let folders = db::list_folders(&b.conn, None).unwrap();
+        let folders = db::list_folders(&b.conn).unwrap();
         let logos = folders.iter().find(|f| f.name == "Logos").unwrap();
         assert_eq!(Some(&logos.id), i1.folder_id.as_ref());
         assert_eq!(logos.color.as_deref(), Some("red"));
         assert!(folders.iter().any(|f| f.name == "Work" && Some(&f.id) == logos.parent_id.as_ref()));
-        let tags = db::list_tags(&b.conn, None).unwrap();
+        let tags = db::list_tags(&b.conn).unwrap();
         assert_eq!(tags.len(), 1);
         assert_eq!(tags[0].count, 2);
 
@@ -442,53 +389,6 @@ mod tests {
         drop(b);
         let again = copy_into(&src, &b_root, |_, _| {}).unwrap();
         assert_eq!((again.copied, again.duplicates), (0, 2));
-    }
-
-    #[test]
-    fn a_parent_arrives_with_its_children_and_links_follow_the_destination() {
-        let tmp = tempfile::tempdir().unwrap();
-        let a = Library::create(&tmp.path().join("A.library")).unwrap();
-        let b_on_root = tmp.path().join("B.library");
-        let b_off_root = tmp.path().join("C.library");
-        let b_on = Library::create(&b_on_root).unwrap();
-        db::set_links_enabled(&b_on.conn, true).unwrap();
-        drop(b_on);
-        Library::create(&b_off_root).unwrap();
-        db::set_links_enabled(&a.conn, true).unwrap();
-        for (id, h) in [("v", "h1"), ("t1", "h2"), ("t2", "h3"), ("solo", "h4")] {
-            add(&a, id, h);
-        }
-        db::link_items(&a.conn, "v", &["t1".into(), "t2".into()]).unwrap();
-        db::set_adopted(&a.conn, "t2", true).unwrap();
-
-        // Only the parent is picked: its children come too.
-        let src = Source::read(&a, &["v".into(), "solo".into()]).unwrap();
-        assert_eq!(src.items.len(), 4);
-        let sum = copy_into(&src, &b_on_root, |_, _| {}).unwrap();
-        assert_eq!((sum.copied, sum.failed.len()), (4, 0));
-        let b = Library::open(&b_on_root).unwrap();
-        let items = all(&b);
-        let get = |id: &str| items.iter().find(|i| i.id == id).unwrap();
-        assert_eq!(get("t1").parent_id.as_deref(), Some("v"));
-        assert_eq!(get("t2").parent_id.as_deref(), Some("v"));
-        assert!(get("t2").adopted && !get("t1").adopted);
-        assert_eq!(get("solo").parent_id, None);
-
-        // A destination without links gets plain items.
-        let sum = copy_into(&src, &b_off_root, |_, _| {}).unwrap();
-        assert_eq!((sum.copied, sum.failed.len()), (4, 0));
-        let c = Library::open(&b_off_root).unwrap();
-        assert!(all(&c).iter().all(|i| i.parent_id.is_none() && !i.adopted));
-
-        // A child alone arrives on its own, not pointing at a parent that isn't there.
-        let one = Source::read(&a, &["t1".into()]).unwrap();
-        let tmp_root = tmp.path().join("D.library");
-        let d = Library::create(&tmp_root).unwrap();
-        db::set_links_enabled(&d.conn, true).unwrap();
-        drop(d);
-        let sum = copy_into(&one, &tmp_root, |_, _| {}).unwrap();
-        assert_eq!((sum.copied, sum.failed.len()), (1, 0));
-        assert_eq!(all(&Library::open(&tmp_root).unwrap())[0].parent_id, None);
     }
 
     #[test]

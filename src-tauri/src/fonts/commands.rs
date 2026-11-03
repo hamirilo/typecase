@@ -69,9 +69,6 @@ fn font_sfnt(state: &AppState, id: &str) -> CmdResult<Vec<u8>> {
         return super::system::sfnt(id);
     }
     let (item, path) = item_paths(state, &[id.to_string()])?.pop().ok_or("フォントが見つかりません")?;
-    if item.kind != db::Kind::Font {
-        return Err("フォントではありません".into());
-    }
     super::to_sfnt(&fs::read(path).map_err(err)?, &item.ext)
 }
 
