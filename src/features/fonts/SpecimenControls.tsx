@@ -1,4 +1,4 @@
-// The font mode's specimen text row (toolbar): the text every font shows, the
+// The specimen text row (toolbar): the text every font shows, the
 // pattern menu, and at the right end the size the slider sets — the text in
 // the specimen layout, the tiles in the grid. It stays in every layout so the
 // controls below it don't move (docs/UI.md, docs/FONT_UI.md).

@@ -1,6 +1,6 @@
 // Splits the list into sections (typeface styles, writing systems, rating
 // bands, tags, folders, months) for the grid, and folds fonts into one row per
-// family in the font mode.
+// family.
 // The result is a flattened display list plus the [start, end) of each
 // section, so layouts and navigation keep working on plain indices.
 import { FONT_CATEGORIES, FONT_SCRIPTS, fontCategoryOf, type Folder, type Item, type Tag } from "./api";
@@ -26,18 +26,10 @@ export interface Grouped {
 }
 
 /**
- * How fonts are folded into families (the font mode): one row per family,
- * and the styles of the families in `open` listed under their row.
- * Null = every item is a row of its own (the stock).
+ * How fonts are folded into families: one row per family, and the styles of
+ * the families in `open` listed under their row.
  */
-export type Families = { open: ReadonlySet<string> } | null;
-
-/**
- * How children are folded under their parent (links on, the stock; docs/LINKS.md):
- * one row per parent, and the children of the parents in `open` listed under their row.
- * Null = every item is a row of its own.
- */
-export type Links = { open: ReadonlySet<string> } | null;
+export type Families = { open: ReadonlySet<string> };
 
 /** Folders in sidebar order (depth first), each with its full path. */
 export function folderPaths(folders: Folder[]): { folder: Folder; path: string }[] {
@@ -52,19 +44,6 @@ export function folderPaths(folders: Folder[]): { folder: Folder; path: string }
   };
   walk(null, "");
   return out;
-}
-
-/** Similar view: one section per group of look-alikes (items stay as they are). */
-export function similarSections(items: Item[]): Section[] {
-  const sections: Section[] = [];
-  for (let i = 0; i < items.length; i++) {
-    if (i === 0 || items[i].group !== items[i - 1].group) {
-      sections.push({ start: i, end: i + 1, title: `グループ ${(items[i].group ?? 0) + 1}` });
-    } else {
-      sections[sections.length - 1].end = i + 1;
-    }
-  }
-  return sections;
 }
 
 /** Ids a list row stands for: a family row's every font, else the item itself. */
@@ -82,19 +61,19 @@ const byWeight = (a: Item, b: Item) =>
 /**
  * One row per font family, where the family's first font is in the (sorted)
  * list: its regular (the style nearest 400, upright), with `familyIds`
- * listing every font of the family. Fonts whose family isn't known yet, and
- * anything but fonts, stay rows of their own.
+ * listing every font of the family. Fonts whose family isn't known yet stay
+ * rows of their own.
  */
 function familyRows(items: Item[]): { rows: Item[]; members: Map<string, Item[]> } {
   const members = new Map<string, Item[]>();
   for (const i of items) {
-    if (i.kind !== "font" || !i.fontFamily) continue;
+    if (!i.fontFamily) continue;
     if (!members.has(i.fontFamily)) members.set(i.fontFamily, []);
     members.get(i.fontFamily)!.push(i);
   }
   const rows: Item[] = [];
   for (const i of items) {
-    const family = i.kind === "font" && i.fontFamily ? members.get(i.fontFamily)! : null;
+    const family = i.fontFamily ? members.get(i.fontFamily)! : null;
     if (!family) rows.push(i);
     else if (family[0] === i) {
       if (family.length === 1) rows.push(i);
@@ -105,25 +84,6 @@ function familyRows(items: Item[]): { rows: Item[]; members: Map<string, Item[]>
     }
   }
   return { rows, members };
-}
-
-/**
- * Children whose parent is in the list go under it: the rows are the rest, a
- * parent with `childIds`. A child whose parent isn't here (the parent was
- * left out of the view, say a trashed parent) stays a row of its own.
- */
-function linkRows(items: Item[]): { rows: Item[]; children: Map<string, Item[]> } {
-  const here = new Set(items.map((i) => i.id));
-  const children = new Map<string, Item[]>();
-  for (const i of items) {
-    if (!i.parentId || !here.has(i.parentId)) continue;
-    if (!children.has(i.parentId)) children.set(i.parentId, []);
-    children.get(i.parentId)!.push(i);
-  }
-  const rows = items
-    .filter((i) => !(i.parentId && here.has(i.parentId)))
-    .map((i) => (children.has(i.id) ? { ...i, childIds: children.get(i.id)!.map((c) => c.id) } : i));
-  return { rows, children };
 }
 
 function build(buckets: { items: Item[]; title: string; color?: string | null; rating?: number }[]): Grouped {
@@ -163,29 +123,21 @@ export function groupItems(
   by: GroupBy,
   tags: Tag[],
   folders: Folder[],
-  families: Families = null,
-  links: Links = null,
+  families: Families,
 ): Grouped {
   if (!items.length) return { items, sections: [] };
-  const { rows: foldedRows, members } = families ? familyRows(items) : { rows: items, members: new Map<string, Item[]>() };
-  const { rows, children } = links ? linkRows(foldedRows) : { rows: foldedRows, children: new Map<string, Item[]>() };
+  const { rows, members } = familyRows(items);
   const byId = new Map(items.map((i) => [i.id, i]));
-  // A family row's styles, and a parent's children, go right under it while it is open.
+  // A family row's styles go right under it while it is open.
   const expand = (list: Item[]): Item[] =>
-    families?.open.size || links?.open.size
+    families.open.size
       ? list.flatMap((r) =>
-          r.familyIds && families?.open.has(r.fontFamily!)
+          r.familyIds && families.open.has(r.fontFamily!)
             ? [r, ...[...members.get(r.fontFamily!)!].sort(byWeight).map((m) => ({ ...m, familyMember: true }))]
-            : r.childIds && links?.open.has(r.id)
-              ? [r, ...children.get(r.id)!.map((c) => ({ ...c, childMember: true }))]
-              : [r],
+            : [r],
         )
       : list;
-  // A parent counts under the tags of its children too (it is in the list because of them).
-  const tagsOf = (r: Item) =>
-    r.familyIds
-      ? new Set(r.familyIds.flatMap((id) => byId.get(id)?.tagIds ?? []))
-      : new Set([...r.tagIds, ...(children.get(r.id) ?? []).flatMap((c) => c.tagIds)]);
+  const tagsOf = (r: Item) => new Set(r.familyIds ? r.familyIds.flatMap((id) => byId.get(id)?.tagIds ?? []) : r.tagIds);
   const grouped = (buckets: { items: Item[]; title: string; color?: string | null; rating?: number }[]) =>
     build(buckets.map((b) => ({ ...b, items: expand(b.items) })));
 
@@ -193,22 +145,17 @@ export function groupItems(
     case "none":
       return { items: expand(rows), sections: [] };
     case "category":
-      return grouped([
-        ...FONT_CATEGORIES.map((c) => ({
-          items: rows.filter((i) => i.kind === "font" && fontCategoryOf(i) === c.key),
-          title: c.label,
-        })),
-        { items: rows.filter((i) => i.kind !== "font"), title: "フォント以外" },
-      ]);
+      return grouped(
+        FONT_CATEGORIES.map((c) => ({ items: rows.filter((i) => fontCategoryOf(i) === c.key), title: c.label })),
+      );
     case "script":
-      return grouped([
-        ...FONT_SCRIPTS.map((c) => ({
+      return grouped(
+        FONT_SCRIPTS.map((c) => ({
           // Not read yet: with the others.
-          items: rows.filter((i) => i.kind === "font" && (i.fontScript ?? "other") === c.key),
+          items: rows.filter((i) => (i.fontScript ?? "other") === c.key),
           title: c.label,
         })),
-        { items: rows.filter((i) => i.kind !== "font"), title: "フォント以外" },
-      ]);
+      );
     case "rating":
       return grouped(
         [5, 4, 3, 2, 1, 0].map((n) => ({

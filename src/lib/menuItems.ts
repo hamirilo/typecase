@@ -2,7 +2,7 @@
 // menu shows the same name and key as the menu bar and the shortcut list.
 import { createElement } from "react";
 import type { IconButton, MenuItem } from "../components/ContextMenu";
-import { appliesTo, command, isEnabled, labelOf } from "./commands";
+import { command, isEnabled, labelOf } from "./commands";
 import { comboText } from "./shortcuts";
 import { useStore } from "../store";
 
@@ -21,9 +21,6 @@ export function commandItem(id: string, over: Partial<{ label: string; onClick: 
     onClick: over.onClick ?? (() => c.run(st())),
   };
 }
-
-/** Commands that apply to the list and selection (the rest are left out, not greyed). */
-export const applicable = (ids: string[]) => ids.filter((id) => appliesTo(command(id), st()));
 
 /** An icon button for a command; `active` when its state is on (a favourite already). */
 export function commandIcon(id: string): IconButton {

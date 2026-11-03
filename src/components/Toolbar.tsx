@@ -3,78 +3,61 @@ import {
   ArrowUpDown,
   ArrowUpNarrowWide,
   ChevronDown,
-  CopyCheck,
   FolderSearch,
-  Minus,
   PanelLeftClose,
   PanelLeftOpen,
   PanelRightClose,
   PanelRightOpen,
-  Plus,
   RefreshCw,
   Search,
   Tag as TagIcon,
   Trash2,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { dragRegion } from "../lib/titleBar";
-import {
-  clearDismissedDuplicates,
-  emptyTrash,
-  keepPlan,
-  reviewDuplicates,
-  similarGroups,
-} from "../lib/actions";
+import { emptyTrash } from "../lib/actions";
 import { SpecimenControls } from "../features/fonts/SpecimenControls";
 import { reloadSystemFonts } from "../features/fonts/system";
-import { type Folder, type ItemKind, type SimilarLevel, type SmartFolder, type SortKey, type Tag, type View } from "../lib/api";
+import { type Folder, type SmartFolder, type SortKey, type Tag, type View } from "../lib/api";
 import { colorHex } from "../lib/colors";
-import { command } from "../lib/commands";
-import { useShallow } from "zustand/react/shallow";
-import { activeConditions, listKinds, placeTotal, useStore, type Mode } from "../store";
-import { PIXEL_KINDS } from "../lib/modes";
+import { activeConditions, placeTotal, useStore } from "../store";
 import { composing } from "../lib/ime";
 import { FilterRow } from "./FilterRow";
-import { DisplayMenu, GroupMenu, LayoutSwitch, ParentsToggle } from "./ViewMenu";
-import { Slider } from "./Slider";
+import { DisplayMenu, GroupMenu, LayoutSwitch } from "./ViewMenu";
 
 /** Thin line between groups of controls. */
 const Divider = ({ className = "" }: { className?: string }) => (
   <div className={`mx-0.5 h-5 w-px shrink-0 bg-line ${className}`} />
 );
 
-/** Sort keys; `only`: offered when the list holds those kinds alone (images and videos have a pixel size). */
-export const SORTS: { key: SortKey; label: string; only?: ItemKind[] }[] = [
+export const SORTS: { key: SortKey; label: string }[] = [
   { key: "importedAt", label: "追加日" },
   { key: "name", label: "名前" },
   { key: "size", label: "ファイルサイズ" },
-  { key: "dimensions", label: "サイズ（px）", only: PIXEL_KINDS },
   { key: "rating", label: "評価" },
   { key: "manual", label: "手動（ドラッグで並べ替え）" },
 ];
 
-const searchHelp = (mode: Mode) =>
+const SEARCH_HELP =
   [
-    mode === "font" ? "名前・ファミリー名・メモ・タグを検索" : "名前・メモ・タグ・テキストの本文を検索",
+    "名前・ファミリー名・メモ・タグを検索",
     "  空白区切り … すべてを含む",
     "  -語 … 除外",
     "  A OR B / A || B … どちらか",
     "  ( ) … グループ化、\"語句\" … 完全一致",
   ].join("\n");
 
-function viewTitle(view: View, mode: Mode, folders: Folder[], smart: SmartFolder[], tags: Tag[]): string {
+function viewTitle(view: View, folders: Folder[], smart: SmartFolder[], tags: Tag[]): string {
   switch (view.kind) {
     case "all":
-      return mode === "font" ? "すべてのフォント" : "すべて";
+      return "すべてのフォント";
     case "unfiled":
       return "未分類";
     case "untagged":
       return "タグなし";
     case "trash":
       return "ゴミ箱";
-    case "similar":
-      return "重複の候補";
     case "favorites":
       return "お気に入り";
     case "pinned":
@@ -96,7 +79,7 @@ export function Toolbar() {
   const search = useStore((s) => s.search);
   const setSearch = useStore((s) => s.setSearch);
   const tags = useStore((s) => s.tags);
-  // Number of images (with tag grouping an image can be listed more than once).
+  // Number of fonts (with tag grouping a font can be listed more than once).
   const count = useStore((s) => s.rawItems.length);
   const selectedCount = useStore((s) => s.selected.size);
   const setSelection = useStore((s) => s.setSelection);
@@ -109,7 +92,6 @@ export function Toolbar() {
   const conditions = useStore(activeConditions);
   // "5 / 13 件" while narrowed: of the place's items without conditions.
   const total = useStore((s) => (activeConditions(s) > 0 ? placeTotal(s) : null));
-  const mode = useStore((s) => s.mode);
   const smart = view.kind === "smart" ? smartFolders.find((f) => f.id === view.id) : undefined;
 
   // Debounce typing so each keystroke doesn't hit the DB.
@@ -153,7 +135,7 @@ export function Toolbar() {
               />
             )}
             <span className="truncate">
-              {editingSmart ? `「${editingSmart.name}」の条件` : viewTitle(view, mode, folders, smartFolders, tags)}
+              {editingSmart ? `「${editingSmart.name}」の条件` : viewTitle(view, folders, smartFolders, tags)}
             </span>
             {selectedCount > 0 ? (
               <span className="flex shrink-0 items-center gap-1 self-center rounded-full bg-accent/20 py-0.5 pr-0.5 pl-2.5 text-xs font-normal text-accent tabular-nums">
@@ -181,7 +163,7 @@ export function Toolbar() {
         </div>
         <div className="flex flex-1 items-center justify-end gap-2">
           <label
-            title={searchHelp(mode)}
+            title={SEARCH_HELP}
             className="flex h-8 min-w-28 shrink basis-60 items-center gap-2 rounded-md border border-transparent bg-white/7 px-2 focus-within:border-accent @max-xl:min-w-0 @max-xl:flex-1"
           >
             <Search size={14} className="shrink-0 text-dim" />
@@ -201,8 +183,8 @@ export function Toolbar() {
           <InspectorToggle className="flex @max-xl:hidden" />
         </div>
       </div>
-      {/* The font mode's text row stays whatever the layout (docs/UI.md). */}
-      {mode === "font" && <SpecimenControls />}
+      {/* The text row stays whatever the layout (docs/UI.md). */}
+      <SpecimenControls />
       {/* One band for the conditions, this view's own controls and how the list
           looks (docs/NAVIGATION.md). It folds a step at a time as the toolbar
           narrows instead of growing a row (docs/UI.md). */}
@@ -224,13 +206,7 @@ function ViewControls() {
   const view = useStore((s) => s.view);
   const showSubfolders = useStore((s) => s.showSubfolders);
   const setShowSubfolders = useStore((s) => s.setShowSubfolders);
-  const items = useStore((s) => s.items);
-  const count = useStore((s) => s.rawItems.length);
-  const dismissedGroups = useStore((s) => s.dismissedGroups);
-  const keepPick = useStore((s) => s.keepPick);
   const [reloading, setReloading] = useState(false);
-  const isSimilar = view.kind === "similar";
-  const groups = useMemo(() => (isSimilar ? similarGroups(items) : []), [isSimilar, items]);
 
   if (view.kind === "folder")
     return (
@@ -276,39 +252,7 @@ function ViewControls() {
       </button>
     );
 
-  if (!isSimilar) return null;
-  return (
-    <>
-      <div className="flex min-w-0 shrink items-center gap-3 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <SimilarLevelControl />
-        {groups.length > 0 && (
-          <span
-            className="shrink-0 whitespace-nowrap text-dim tabular-nums @max-6xl:hidden"
-            title="画像の「残す」で残す 1 枚を選べます（初期値は解像度が最も高い画像）"
-          >
-            {groups.length} グループ・重複 {count - groups.length} 枚
-          </span>
-        )}
-        {dismissedGroups > 0 && (
-          <button
-            onClick={clearDismissedDuplicates}
-            title="「重複ではない」にした候補をすべて元に戻します"
-            className="shrink-0 rounded px-1.5 py-0.5 whitespace-nowrap text-accent hover:bg-accent/15"
-          >
-            無視した {dismissedGroups} 件を戻す
-          </button>
-        )}
-      </div>
-      <button
-        title="残す1枚を確認してから、残りをゴミ箱へ移動"
-        disabled={groups.length === 0}
-        onClick={() => reviewDuplicates(keepPlan(groups, keepPick))}
-        className={`${viewAction} ghost disabled:off`}
-      >
-        <CopyCheck size={14} /> <span className="@max-5xl:hidden">まとめて整理…</span>
-      </button>
-    </>
-  );
+  return null;
 }
 
 /** The open view's one action, in the same place on the band whatever it is. */
@@ -317,19 +261,15 @@ const viewAction = "flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2.5 whi
 /**
  * How the list looks, at the right end of the band. As the toolbar narrows
  * these fold in reverse order of how often they are used, each staying in its
- * own place: the thumbnail slider first (the display menu has the same one),
- * then 紐づけ and レイアウト into that menu, the order down to its icon, and
- * the grouping last of all (docs/UI.md).
+ * own place: レイアウト into the display menu first, the order down to its
+ * icon, and the grouping last of all (docs/UI.md). The sizes are on the
+ * specimen text row.
  */
 function DisplayControls() {
   const sort = useStore((s) => s.sort);
   const desc = useStore((s) => s.desc);
   const setSort = useStore((s) => s.setSort);
-  const layout = useStore((s) => s.layout);
-  const mode = useStore((s) => s.mode);
   const view = useStore((s) => s.view);
-  const kinds = useStore(useShallow(listKinds));
-  const sorts = SORTS.filter((s) => !s.only || (kinds.length > 0 && kinds.every((k) => s.only!.includes(k))));
   const isSystem = view.kind === "system";
   const canManual = view.kind === "folder";
   const manual = sort === "manual";
@@ -357,7 +297,7 @@ function DisplayControls() {
               onChange={(e) => setSort(e.target.value as SortKey, desc)}
               className="absolute inset-0 cursor-default opacity-0"
             >
-              {sorts.map((s) => (
+              {SORTS.map((s) => (
                 <option
                   key={s.key}
                   value={s.key}
@@ -383,41 +323,10 @@ function DisplayControls() {
         </button>
       </div>
       <GroupMenu />
-      {mode === "stock" && <ParentsToggle />}
       <Divider className="@max-5xl:hidden" />
       <LayoutSwitch />
       <DisplayMenu />
-      {/* The font mode's sizes are on the specimen text row. */}
-      {mode !== "font" && <ThumbSize hidden={layout === "list"} />}
     </>
-  );
-}
-
-/** Thumbnail size: the slider, with − / + that step like ⌘- / ⌘+. */
-function ThumbSize({ hidden }: { hidden: boolean }) {
-  const thumbSize = useStore((s) => s.thumbSize);
-  const setThumbSize = useStore((s) => s.setThumbSize);
-  const zoom = (id: "view.zoomIn" | "view.zoomOut") => command(id).run(useStore.getState());
-  const step = "flex h-6 w-5 shrink-0 items-center justify-center rounded text-dim hover:bg-white/8 hover:text-fg";
-  return (
-    // The first thing to fold: the display menu holds the same slider.
-    <div className={`flex shrink-0 items-center @max-[96rem]:hidden ${hidden ? "hidden" : ""}`}>
-      <button title="縮小（⌘-）" onClick={() => zoom("view.zoomOut")} className={step}>
-        <Minus size={13} />
-      </button>
-      <Slider
-        min={80}
-        max={360}
-        step={10}
-        value={thumbSize}
-        onChange={(e) => setThumbSize(Number(e.target.value))}
-        title="サムネイルサイズ（⌘+ / ⌘-）"
-        className="mx-1 w-20"
-      />
-      <button title="拡大（⌘+）" onClick={() => zoom("view.zoomIn")} className={step}>
-        <Plus size={13} />
-      </button>
-    </div>
   );
 }
 
@@ -435,61 +344,5 @@ function InspectorToggle({ className }: { className: string }) {
     >
       {inspectorOpen ? <PanelRightClose size={15} /> : <PanelRightOpen size={15} />}
     </button>
-  );
-}
-
-const LEVELS: { key: SimilarLevel; label: string; hint: string }[] = [
-  { key: "strict", label: "ほぼ同じ", hint: "リサイズや再保存だけ違う、ほぼ同一の画像" },
-  { key: "standard", label: "似ている", hint: "構図と色が同じ画像（標準）" },
-  { key: "loose", label: "やや似ている", hint: "なんとなく似ている画像まで。無関係なものも混ざります" },
-];
-
-/**
- * Similar view: how alike two images must be to be grouped. Side by side
- * while there is room; below @5xl the same choices fold into a select in the
- * same place, like the grouping does (docs/UI.md「畳む順番」).
- */
-function SimilarLevelControl() {
-  const level = useStore((s) => s.similarLevel);
-  const setLevel = useStore((s) => s.setSimilarLevel);
-  const current = LEVELS.find((l) => l.key === level) ?? LEVELS[1];
-  return (
-    <div className="flex shrink-0 items-center gap-2">
-      <span className="shrink-0 whitespace-nowrap text-dim @max-6xl:hidden">似ている度合い</span>
-      <label
-        title={`似ている度合い：${current.hint}`}
-        className="relative hidden h-7 items-center gap-1.5 rounded-md pr-2 pl-2.5 whitespace-nowrap ghost focus-within:border-accent @max-5xl:flex"
-      >
-        <CopyCheck size={13} className="text-dim" />
-        {current.label}
-        <ChevronDown size={14} className="text-dim" />
-        <select
-          aria-label="似ている度合い"
-          value={level}
-          onChange={(e) => setLevel(e.target.value as SimilarLevel)}
-          className="absolute inset-0 cursor-default opacity-0"
-        >
-          {LEVELS.map((l) => (
-            <option key={l.key} value={l.key}>
-              {l.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      <div className="flex h-6 shrink-0 items-stretch rounded-md track @max-5xl:hidden">
-        {LEVELS.map((l) => (
-          <button
-            key={l.key}
-            title={l.hint}
-            onClick={() => setLevel(l.key)}
-            className={`rounded px-2.5 whitespace-nowrap ${
-              level === l.key ? "thumb font-medium" : "text-fg/85 hover:bg-hover hover:text-fg"
-            }`}
-          >
-            {l.label}
-          </button>
-        ))}
-      </div>
-    </div>
   );
 }

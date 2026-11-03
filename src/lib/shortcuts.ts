@@ -8,8 +8,6 @@
  * "Click", "Drag", "Wheel" and "Pinch" are mouse gestures, "0-5" and "Arrows"
  * key ranges, "=" the ⌘+ key.
  */
-import { type ItemKind } from "./api";
-import { MODES, modeLabel } from "./modes";
 import { command } from "./commands";
 import type { Layout } from "../store";
 
@@ -17,8 +15,6 @@ export type ShortcutRow = {
   label: string;
   /** Alternatives, any of which does it. */
   keys: string[];
-  /** Kinds it works for (all when absent). */
-  kinds?: ItemKind[];
   /** A different label in some layouts. */
   labelIn?: Partial<Record<Layout, string>>;
 };
@@ -28,14 +24,14 @@ export type ShortcutSection = { id: string; title: string; rows: ShortcutRow[] }
 /** A row for a command; `extra` adds keys only the list or the viewer handles. */
 function cmd(id: string, over: Partial<ShortcutRow> = {}): ShortcutRow {
   const c = command(id);
-  return { label: c.title, keys: c.keys ?? [], kinds: c.kinds, ...over };
+  return { label: c.title, keys: c.keys ?? [], ...over };
 }
 
-/** Two commands on one row ("左に回転 / 右に回転"). */
+/** Two commands on one row ("フォルダを上へ / 下へ"). */
 function pair(a: string, b: string, label: string): ShortcutRow {
   const x = command(a);
   const y = command(b);
-  return { label, keys: [...(x.keys ?? []), ...(y.keys ?? [])], kinds: x.kinds };
+  return { label, keys: [...(x.keys ?? []), ...(y.keys ?? [])] };
 }
 
 let sections: ShortcutSection[] | null = null;
@@ -47,12 +43,7 @@ export function shortcutSections(): ShortcutSection[] {
       id: "general",
       title: "全体",
       rows: [
-        { label: MODES.map(modeLabel).join(" / "), keys: MODES.map((_, i) => `Mod+${i + 1}`) },
         cmd("view.sidebar", { label: "サイドバーの表示・非表示" }),
-        {
-          label: "種類で絞る（画像・ファイル・テキスト・動画・ブックマーク）/ 絞らない",
-          keys: ["Alt+1", "Alt+2", "Alt+3", "Alt+4", "Alt+5", "Alt+0"],
-        },
         cmd("view.inspector", { label: "情報を表示（表示中なら詳細パネルを閉じる）" }),
         cmd("view.shelf", { label: "シェルフを表示（表示中なら詳細パネルを閉じる）" }),
         cmd("view.toc", { label: "グループの目次を開く" }),
@@ -60,7 +51,7 @@ export function shortcutSections(): ShortcutSection[] {
         cmd("edit.filter", { label: "絞り込みの行へ" }),
         cmd("go.folder", { label: "フォルダを開く（名前で探す）" }),
         {
-          ...pair("view.zoomIn", "view.zoomOut", "サムネイルを大きく / 小さく"),
+          ...pair("view.zoomIn", "view.zoomOut", "タイルを大きく / 小さく"),
           labelIn: { specimen: "見本の文字を大きく / 小さく" },
         },
         cmd("app.settings", { label: "設定" }),
@@ -89,7 +80,6 @@ export function shortcutSections(): ShortcutSection[] {
         cmd("item.tray", { label: "シェルフに追加・外す" }),
         { label: "評価", keys: ["0-5"] },
         { label: "評価して次へ", keys: ["Shift+0-5"] },
-        pair("item.rotateCcw", "item.rotateCw", "左に回転 / 右に回転"),
         cmd("item.rename"),
         cmd("item.copy"),
         pair("item.copyTags", "item.pasteTags", "タグをコピー / 貼り付け"),
@@ -104,10 +94,6 @@ export function shortcutSections(): ShortcutSection[] {
         cmd("item.moveTo"),
         cmd("item.moveToLast"),
         { label: "フォルダへ入れる", keys: ["Drag"] },
-        { label: "別の項目へドラッグして紐づける（親子の紐づけが有効なとき）", keys: ["Drag"] },
-        cmd("item.link"),
-        cmd("item.unlink"),
-        cmd("item.adopt"),
         cmd("folder.new"),
         cmd("smart.new"),
         pair("folder.up", "folder.down", "フォルダを上へ / 下へ"),
@@ -121,17 +107,10 @@ export function shortcutSections(): ShortcutSection[] {
         { label: "前 / 次", keys: ["Arrows", "A", "D"] },
         { label: "最初 / 最後", keys: ["Home", "End"] },
         { label: "閉じる", keys: ["Esc", "Space", "Enter"] },
-        { label: "再生 / 一時停止", keys: ["K"], kinds: ["video"] },
-        { label: "10 秒戻す / 進める", keys: ["J", "L"], kinds: ["video"] },
-        { label: "1 コマ戻す / 進める（一時停止中）", keys: [",", "."], kinds: ["video"] },
-        { label: "全体表示 ⇔ 実寸", keys: ["Z"], kinds: ["image"] },
-        { label: "拡大 / 縮小", keys: ["Mod+=", "Mod+-", "Alt+Wheel", "Pinch"], kinds: ["image"] },
-        { label: "実寸 / 全体を表示", keys: ["Mod+0", "Mod+9"], kinds: ["image"] },
         { label: "詳細", keys: ["I"] },
         { label: "前後のサムネイル", keys: ["T"] },
-        { label: "画像のみ表示（操作や情報を隠す）", keys: ["H"] },
+        { label: "フォントのみ表示（操作や情報を隠す）", keys: ["H"] },
         { label: "お気に入り・ピン留め・シェルフ・評価", keys: ["F", "P", "B", "0-5"] },
-        pair("item.rotateCcw", "item.rotateCw", "左に回転 / 右に回転"),
       ],
     },
     {

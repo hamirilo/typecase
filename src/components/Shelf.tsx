@@ -1,31 +1,18 @@
 // The shelf: a tab of the details panel on the right (DetailsPanel.tsx)
-// where things are gathered for a while (the `tray` table), one per mode.
-// Fonts are put there to be compared, at most FONT_SHELF_MAX; images and
-// files to be compared, exported or put on one sheet. It is shown when the
-// user picks its tab, and for the length of a drag from the list (docs/UI.md).
-import { convertFileSrc } from "@tauri-apps/api/core";
+// where fonts are gathered to be compared (the `tray` table), at most
+// FONT_SHELF_MAX. It is shown when the user picks its tab, and for the length
+// of a drag from the list (docs/UI.md).
 import { ArrowRight, Ban, ListX, Plus, X } from "lucide-react";
 import { useEffect, useRef } from "react";
-import {
-  clearTray,
-  exportTray,
-  removeFromShelf,
-  shelfAdding,
-  sheetFromTray,
-  transferList,
-} from "../lib/actions";
+import { clearTray, exportTray, removeFromShelf, shelfAdding, transferList } from "../lib/actions";
 import type { Item } from "../lib/api";
 import { FontShelfLabel } from "../features/fonts/ShelfChip";
 import { FONT_SHELF_MAX, useStore } from "../store";
 import { useMenu } from "./ContextMenu";
 import { startPointerDrag } from "./DragLayer";
 
-const button =
-  "flex h-6 shrink-0 items-center justify-center gap-1 rounded-md px-2 whitespace-nowrap ghost disabled:off";
-
 export function Shelf() {
   const shelf = useStore((s) => s.shelf);
-  const fonts = useStore((s) => s.mode === "font");
   const comparing = useStore((s) => s.comparing);
   const setComparing = useStore((s) => s.setComparing);
   // Items dragged from the list: the whole shelf takes them.
@@ -33,8 +20,7 @@ export function Shelf() {
   const over = useStore((s) => s.drag?.kind === "items" && s.drag.from !== "shelf" && s.dropTarget === "tray");
   const flash = useStore((s) => (s.flash?.target === "tray" ? s.flash.n : null));
   const empty = shelf.length === 0;
-  // The stock's comparison lines up images only.
-  const comparable = fonts ? !empty : shelf.some((i) => i.kind === "image");
+  const comparable = !empty;
   // What was just added is at the end: bring it into view.
   const chips = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -44,12 +30,7 @@ export function Shelf() {
 
   const menu = (e: React.MouseEvent) =>
     useMenu.getState().show(e, [
-      ...(fonts
-        ? []
-        : [
-            { label: "書き出し…", disabled: empty, onClick: exportTray },
-            { label: "まとめて出力…", disabled: empty, onClick: sheetFromTray },
-          ]),
+      { label: "書き出し…", disabled: empty, onClick: exportTray },
       { label: "比較する", disabled: !comparable || comparing, onClick: () => setComparing(true) },
       { label: "別のライブラリへ…", disabled: empty, onClick: () => transferList({ kind: "tray" }) },
       { separator: true },
@@ -67,11 +48,10 @@ export function Shelf() {
         <span key={flash} className="pointer-events-none absolute inset-0 animate-drop-pulse bg-accent/20" />
       )}
       {adding && <DropHint ids={adding} over={over} />}
-      {/* "比較する" and "空にする" keep their place in both modes; the stock's own two go below them. */}
       <div className="flex shrink-0 flex-col gap-2 border-b border-line p-3">
         <div className="flex items-center gap-2">
           <span className="flex-1 text-dim tabular-nums">
-            {fonts ? `${shelf.length} / ${FONT_SHELF_MAX} 件` : `${shelf.length} 件`}
+            {`${shelf.length} / ${FONT_SHELF_MAX} 件`}
           </span>
           {/* Not a trash can: it only takes things off the shelf. */}
           <button
@@ -87,36 +67,17 @@ export function Shelf() {
         <button
           disabled={!comparable || comparing}
           onClick={() => setComparing(true)}
-          title={
-            comparing
-              ? "比較中"
-              : fonts
-                ? "シェルフのフォントを並べて比べる"
-                : comparable
-                  ? "シェルフの画像を並べて比べる（拡大・移動はすべての画像で一緒に）"
-                  : "シェルフに画像がありません（比べられるのは画像です）"
-          }
+          title={comparing ? "比較中" : "シェルフのフォントを並べて比べる"}
           className="flex h-7 items-center justify-center gap-1 rounded-md bg-accent-fill px-2.5 font-medium whitespace-nowrap text-white enabled:hover:brightness-110 disabled:off disabled:bg-control"
         >
           比較する <ArrowRight size={13} />
         </button>
-        {!fonts && (
-          <div className="grid grid-cols-2 gap-2">
-            <button disabled={empty} onClick={exportTray} title="元のファイルのままフォルダへ書き出す" className={button}>
-              書き出し…
-            </button>
-            <button disabled={empty} onClick={sheetFromTray} title="1 枚の画像・HTML にまとめる" className={button}>
-              まとめて出力…
-            </button>
-          </div>
-        )}
       </div>
       <div ref={chips} className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto p-3">
         {shelf.map((item) => (
           <Chip key={item.id} item={item} />
         ))}
-        {fonts &&
-          Array.from({ length: Math.max(0, FONT_SHELF_MAX - shelf.length) }, (_, i) => (
+        {Array.from({ length: Math.max(0, FONT_SHELF_MAX - shelf.length) }, (_, i) => (
             <span
               key={`free${i}`}
               className="flex h-10 shrink-0 items-center justify-center rounded-md border border-dashed border-line text-dim/60"
@@ -125,9 +86,7 @@ export function Shelf() {
             </span>
           ))}
         <p className="mt-1 text-dim/80">
-          {fonts
-            ? `一覧で選んで B キー、またはここへドラッグ。比べたいフォントを最大 ${FONT_SHELF_MAX} 件まで置いておけます`
-            : "一覧で選んで B キー、またはここへドラッグ。画像を並べて比べたり、書き出しやまとめて出力の前に集めておけます"}
+          {`一覧で選んで B キー、またはここへドラッグ。比べたいフォントを最大 ${FONT_SHELF_MAX} 件まで置いておけます`}
         </p>
       </div>
     </section>
@@ -196,21 +155,7 @@ function Chip({ item }: { item: Item }) {
         dragged ? "opacity-40" : ""
       }`}
     >
-      {item.kind === "font" ? (
-        <FontShelfLabel item={item} />
-      ) : (
-        <>
-          <img
-            src={convertFileSrc(item.thumbPath)}
-            alt=""
-            draggable={false}
-            className="h-8 w-8 shrink-0 rounded bg-bg object-cover"
-          />
-          <span className="min-w-0 flex-1 truncate" title={item.name}>
-            {item.name}
-          </span>
-        </>
-      )}
+      <FontShelfLabel item={item} />
       <button
         title="シェルフから外す"
         onPointerDown={(e) => e.stopPropagation()}

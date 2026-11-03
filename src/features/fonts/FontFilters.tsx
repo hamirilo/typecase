@@ -1,4 +1,4 @@
-// The font mode's conditions in the filter row (docs/NAVIGATION.md): writing
+// The fonts' conditions in the filter row (docs/NAVIGATION.md): writing
 // system, typeface style, weight and features. Within one the values picked
 // are "any of"; with the other conditions, "all of". The counts are with the
 // other conditions on (`useFacets`).

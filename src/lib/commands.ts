@@ -7,21 +7,7 @@
  * Keys are written like "Mod+Shift+R": Mod is ⌘ on macOS and Ctrl elsewhere.
  * The first key is the one menus show.
  */
-import { OFF_COMMANDS } from "./limits";
-import {
-  Copy,
-  FlipHorizontal2,
-  FlipVertical2,
-  FolderInput,
-  ImagePlus,
-  Heart,
-  Layers,
-  Pin,
-  Trash2,
-  Undo2,
-  type LucideIcon,
-} from "lucide-react";
-import { RotateLeft, RotateRight } from "./icons";
+import { Copy, FolderInput, Heart, Layers, Pin, Plus, Trash2, type LucideIcon } from "lucide-react";
 import {
   copySelection,
   copyTags,
@@ -35,39 +21,26 @@ import {
   importFilesDialog,
   importFolderDialog,
   moveToLastFolder,
-  linkedIn,
-  makeParent,
-  pickVideoThumb,
-  resetVideoThumb,
-  setVideoThumb,
-  toggleAdopted,
-  unlinkItems,
   onShelf,
   openLibraryDialog,
   openSelection,
-  orient,
   pasteTags,
   selectionOrShown,
   setRating,
-  sheetList,
   shiftFolder,
   toggleFavorite,
   togglePinned,
   toggleTray,
-  transferAllOfKind,
-  transferableKind,
+  transferAll,
   transferList,
   trayList,
-  pickKind,
 } from "./actions";
-import { api, isSystemId, kindLabel, type Item, type ItemKind } from "./api";
+import { api, isSystemId, type Item } from "./api";
 import { fontApi } from "../features/fonts/api";
 import { checkForUpdate, openReleaseNotes } from "./update";
-import { COMPARE_ZOOM, currentFolderId, listKinds, MODES, shelfShown, shownKinds, shownModes, useStore, zoomLook } from "../store";
-import { kindsNoun, modeLabel, rangeKinds, STOCK_KINDS } from "./modes";
+import { currentFolderId, shelfShown, useStore } from "../store";
 import { rowIds } from "./grouping";
 import { useShortcutHelp } from "../components/ShortcutHelp";
-import { createText } from "../features/texts/actions";
 
 type S = ReturnType<typeof useStore.getState>;
 
@@ -79,8 +52,6 @@ export interface Command {
   label?: (s: S) => string;
   icon?: LucideIcon;
   keys?: string[];
-  /** Kinds it applies to (all when absent): rotating is for images only. */
-  kinds?: ItemKind[];
   enabled?: (s: S) => boolean;
   checked?: (s: S) => boolean;
   run: (s: S) => void;
@@ -113,43 +84,15 @@ const allHave = (s: S, f: (i: Item) => boolean) => {
   const xs = selItems(s);
   return xs.length > 0 && xs.every(f);
 };
-/** Links are on for this library and the list is the stock's (fonts have families instead). */
-export const linksOn = (s: S) => s.librarySettings.links && s.mode === "stock";
-/**
- * Every selected item is a child whose parent isn't selected: it can't change folder on its own,
- * it goes where its parent goes (docs/LINKS.md; db.rs `with_linked`).
- */
-const onlyChildren = (s: S) => {
-  const xs = selItems(s);
-  const picked = new Set(sel(s));
-  return xs.length > 0 && xs.every((i) => i.parentId && !picked.has(i.parentId));
-};
-/** The one video selected, to give a thumbnail (docs/VIDEO.md). */
-const oneVideo = (s: S): Item | undefined => {
-  const xs = selItems(s);
-  return live(s) && xs.length === 1 && xs[0].kind === "video" ? xs[0] : undefined;
-};
-/** A video and an image selected: the image can be the video's thumbnail. */
-const videoAndImage = (s: S): [Item, Item] | undefined => {
-  const xs = selItems(s);
-  if (!live(s) || xs.length !== 2) return undefined;
-  const v = xs.find((i) => i.kind === "video");
-  const img = xs.find((i) => i.kind === "image");
-  return v && img ? [v, img] : undefined;
-};
 const lastFolder = (s: S) => s.folders.find((f) => f.id === s.recentFolders[0]);
 
 /**
- * ⌘+ / ⌘-: the size the slider sets. The font mode's is on the specimen text
- * row: the text in the specimen layout, the tiles in the grid.
+ * ⌘+ / ⌘-: the size set on the specimen text row: the text in the specimen
+ * layout, the tiles in the grid.
  */
 function zoom(s: S, dir: 1 | -1) {
-  // The images compared from the stock shelf zoom together (docs/COMPARE.md).
-  if (s.comparing && s.mode === "stock") {
-    s.setCompareLook((l) => zoomLook(l, dir > 0 ? COMPARE_ZOOM.step : 1 / COMPARE_ZOOM.step));
-  } else if (s.mode === "font" && s.layout === "specimen") s.setSpecimenSize(s.specimenSize + 8 * dir);
-  else if (s.mode === "font") s.setTileSize(s.tileSize + 20 * dir);
-  else s.setThumbSize(Math.min(360, Math.max(80, s.thumbSize + 20 * dir)));
+  if (s.layout === "specimen") s.setSpecimenSize(s.specimenSize + 8 * dir);
+  else s.setTileSize(s.tileSize + 20 * dir);
 }
 
 const ALL_COMMANDS: Command[] = [
@@ -179,9 +122,8 @@ const ALL_COMMANDS: Command[] = [
   // Adding is mostly done by dropping onto the window; these are the menu's way in.
   {
     id: "list.import",
-    title: "追加…",
-    icon: ImagePlus,
-    label: (s) => `${kindsNoun(shownKinds(s))}を追加…`,
+    title: "フォントを追加…",
+    icon: Plus,
     enabled: library,
     run: () => void importFilesDialog(),
   },
@@ -197,52 +139,9 @@ const ALL_COMMANDS: Command[] = [
   {
     id: "library.transferAll",
     title: "すべてを別のライブラリへ…",
-    label: (s) => {
-      const kind = transferableKind(s);
-      return kind ? `${kindLabel(kind)}をすべて別のライブラリへ…` : "すべてを別のライブラリへ…";
-    },
-    // A kind at a time (in the stock, narrow to the kind first).
-    enabled: (s) => {
-      const kind = transferableKind(s);
-      return !!kind && (s.counts.kinds[kind] ?? 0) > 0;
-    },
-    run: () => transferAllOfKind(),
+    enabled: (s) => s.counts.all > 0,
+    run: () => transferAll(),
   },
-
-  // -------------------------------------------------------------- modes
-  ...MODES.map(
-    (m, i): Command => ({
-      id: `mode.${m}`,
-      title: modeLabel(m),
-      keys: [`Mod+${i + 1}`],
-      // A kind the library isn't used for does nothing (the keys stay fixed).
-      enabled: (s) => shownModes(s).includes(m),
-      checked: (s) => s.mode === m,
-      run: (s) => s.setMode(m),
-    }),
-  ),
-
-  // ------------------------------------- the range of kinds (docs/KINDS.md)
-  // The sidebar's range: ⌥1… a kind, ⌥0 every kind. Keys are fixed per kind;
-  // the similar view is of images whatever is picked.
-  {
-    id: "kinds.none",
-    title: "種類で絞らない",
-    keys: ["Alt+0"],
-    enabled: (s) => rangeKinds(s).length > 0 && s.view.kind !== "similar",
-    checked: (s) => s.filter.kinds.length === 0,
-    run: () => pickKind(null),
-  },
-  ...STOCK_KINDS.map(
-    (k, i): Command => ({
-      id: `kinds.${k}`,
-      title: kindLabel(k),
-      keys: [`Alt+${i + 1}`],
-      enabled: (s) => rangeKinds(s).includes(k) && s.view.kind !== "similar",
-      checked: (s) => s.filter.kinds.includes(k),
-      run: () => pickKind(k),
-    }),
-  ),
 
   // --------------------------------------------------------------- view
   {
@@ -280,14 +179,14 @@ const ALL_COMMANDS: Command[] = [
   {
     id: "view.zoomIn",
     title: "拡大",
-    label: (s) => (s.mode === "font" && s.layout === "specimen" ? "文字を大きく" : "拡大"),
+    label: (s) => (s.layout === "specimen" ? "文字を大きく" : "拡大"),
     keys: ["Mod+="],
     run: (s) => zoom(s, 1),
   },
   {
     id: "view.zoomOut",
     title: "縮小",
-    label: (s) => (s.mode === "font" && s.layout === "specimen" ? "文字を小さく" : "縮小"),
+    label: (s) => (s.layout === "specimen" ? "文字を小さく" : "縮小"),
     keys: ["Mod+-"],
     run: (s) => zoom(s, -1),
   },
@@ -296,19 +195,6 @@ const ALL_COMMANDS: Command[] = [
     title: "サブフォルダの内容を表示",
     checked: (s) => s.showSubfolders,
     run: (s) => s.setShowSubfolders(!s.showSubfolders),
-  },
-  // Parents' rows (docs/LINKS.md): their children open under them.
-  {
-    id: "view.openParents",
-    title: "紐づけた項目をすべて開く",
-    enabled: (s) => linksOn(s) && s.rawItems.some((i) => i.parentId) && s.items.some((i) => i.childIds && !s.openParents.has(i.id)),
-    run: (s) => s.setAllParents(true),
-  },
-  {
-    id: "view.closeParents",
-    title: "紐づけた項目をすべて閉じる",
-    enabled: (s) => linksOn(s) && s.openParents.size > 0,
-    run: (s) => s.setAllParents(false),
   },
   { id: "go.folder", title: "フォルダへ…", keys: ["Mod+J"], run: (s) => s.setPicker("goto") },
 
@@ -373,7 +259,7 @@ const ALL_COMMANDS: Command[] = [
     icon: Trash2,
     keys: ["Mod+Backspace", "Delete"],
     // ⌘⌫ / Ctrl+Backspace reach the menu while typing too: in a text field
-    // (the text editor, the search box) they are for deleting words.
+    // (the search box, the specimen text) they are for deleting words.
     enabled: (s) => mine(s) && !typing(),
     run: (s) => void deleteSelection(sel(s)),
   },
@@ -425,11 +311,11 @@ const ALL_COMMANDS: Command[] = [
   {
     id: "item.tray",
     title: "シェルフ",
-    // In the font mode a selected family goes on the shelf as one font (`shelfIds`).
+    // A selected family goes on the shelf as one font (`shelfIds`).
     label: (s) => (sel(s).length && onShelf(sel(s)) ? "シェルフから外す" : "シェルフに追加"),
     icon: Layers,
     keys: ["B"],
-    // Installed fonts go on the font shelf too, to be compared (docs/SYSTEM_FONTS.md).
+    // Installed fonts go on the shelf too, to be compared (docs/SYSTEM_FONTS.md).
     enabled: (s) => any(s) && notTrash(s),
     checked: (s) => sel(s).length > 0 && onShelf(sel(s)),
     run: (s) => void toggleTray(sel(s)),
@@ -446,49 +332,6 @@ const ALL_COMMANDS: Command[] = [
       run: (s) => void setRating(sel(s), n),
     }),
   ),
-  {
-    id: "item.rotateCcw",
-    title: "左に回転",
-    icon: RotateLeft,
-    keys: ["Mod+Shift+L"],
-    kinds: ["image"],
-    enabled: live,
-    run: (s) => void orient(sel(s), "rotateCcw"),
-  },
-  {
-    id: "item.rotateCw",
-    title: "右に回転",
-    icon: RotateRight,
-    keys: ["Mod+Shift+R"],
-    kinds: ["image"],
-    enabled: live,
-    run: (s) => void orient(sel(s), "rotateCw"),
-  },
-  {
-    id: "item.flipH",
-    title: "左右反転",
-    icon: FlipHorizontal2,
-    kinds: ["image"],
-    enabled: live,
-    run: (s) => void orient(sel(s), "flipH"),
-  },
-  {
-    id: "item.flipV",
-    title: "上下反転",
-    icon: FlipVertical2,
-    kinds: ["image"],
-    enabled: live,
-    run: (s) => void orient(sel(s), "flipV"),
-  },
-  {
-    id: "item.resetOrientation",
-    title: "元の向きに戻す",
-    icon: Undo2,
-    kinds: ["image"],
-    enabled: (s) => live(s) && !allHave(s, (i) => i.rotation === 0 && !i.flipped),
-    run: (s) => void orient(sel(s), "reset"),
-  },
-
   // ---------------------------------------------------- taking things out
   {
     id: "list.export",
@@ -501,10 +344,9 @@ const ALL_COMMANDS: Command[] = [
     id: "library.export",
     title: "ライブラリ全体を書き出し…",
     // Every item not in the trash, whatever the list shows (docs/EXPORT.md).
-    enabled: (s) => !!s.library && Object.values(s.counts.kinds).some((n) => (n ?? 0) > 0),
+    enabled: (s) => !!s.library && s.counts.all > 0,
     run: () => exportLibrary(),
   },
-  { id: "list.sheet", title: "まとめて出力…", enabled: library, run: () => void sheetList(selectionOrShown()) },
   {
     id: "list.transfer",
     title: "別のライブラリへ…",
@@ -524,7 +366,7 @@ const ALL_COMMANDS: Command[] = [
     id: "item.moveTo",
     title: "フォルダへ移動…",
     keys: ["Mod+Shift+J"],
-    enabled: (s) => live(s) && !onlyChildren(s),
+    enabled: live,
     run: (s) => s.setPicker("move"),
   },
   {
@@ -532,99 +374,25 @@ const ALL_COMMANDS: Command[] = [
     title: "最後に使ったフォルダへ移動",
     label: (s) => (lastFolder(s) ? `「${lastFolder(s)!.name}」へ移動` : "最後に使ったフォルダへ移動"),
     keys: ["Shift+D"],
-    enabled: (s) => live(s) && !onlyChildren(s),
+    enabled: live,
     run: (s) => void moveToLastFolder(sel(s)),
   },
   {
     id: "item.newFolder",
     title: "選択から新しいフォルダ",
-    enabled: (s) => live(s) && !onlyChildren(s),
+    enabled: live,
     run: (s) => void createFolder(null, sel(s)),
   },
   {
     id: "item.unfile",
     title: "未分類に戻す",
-    enabled: (s) => mine(s) && s.view.kind === "folder" && !onlyChildren(s),
+    enabled: (s) => mine(s) && s.view.kind === "folder",
     run: (s) => {
       const folder = currentFolderId();
       if (folder) void s.run(() => api.removeFromFolder(sel(s), folder));
     },
   },
-  // Parent–child links (docs/LINKS.md): the library turns them on in the settings.
-  {
-    id: "item.link",
-    title: "親に紐づける…",
-    enabled: (s) => live(s) && linksOn(s),
-    run: (s) => s.setPicker("parent"),
-  },
-  {
-    id: "item.unlink",
-    title: "紐づけを外す",
-    enabled: (s) => live(s) && linksOn(s) && linkedIn(sel(s)).length > 0,
-    run: (s) => void unlinkItems(sel(s)),
-  },
-  {
-    id: "item.makeParent",
-    title: "親にする",
-    // A child: it and its parent change places (the other children go under it too).
-    enabled: (s) => live(s) && linksOn(s) && sel(s).length === 1 && !!selItems(s)[0]?.parentId,
-    run: (s) => void makeParent(sel(s)[0]),
-  },
-  {
-    id: "item.adopt",
-    title: "採用にする",
-    label: (s) => (selItems(s)[0]?.adopted ? "採用を外す" : "採用にする"),
-    // One child at a time: the one picked among its parent's children.
-    enabled: (s) => live(s) && linksOn(s) && sel(s).length === 1 && !!selItems(s)[0]?.parentId,
-    checked: (s) => !!selItems(s)[0]?.adopted,
-    run: (s) => void toggleAdopted(sel(s)[0]),
-  },
-  // A video's own thumbnail (docs/VIDEO.md).
-  {
-    id: "item.thumbFile",
-    title: "画像ファイルをサムネイルに…",
-    enabled: (s) => !!oneVideo(s),
-    run: (s) => void pickVideoThumb(oneVideo(s)!.id),
-  },
-  {
-    id: "item.thumbClipboard",
-    title: "クリップボードの画像をサムネイルに",
-    enabled: (s) => !!oneVideo(s),
-    run: (s) => void setVideoThumb(oneVideo(s)!.id, { from: "clipboard" }),
-  },
-  {
-    id: "item.thumbSelected",
-    title: "選んだ画像を動画のサムネイルに",
-    enabled: (s) => !!videoAndImage(s),
-    run: (s) => {
-      const [v, img] = videoAndImage(s)!;
-      void setVideoThumb(v.id, { from: "item", id: img.id });
-    },
-  },
-  {
-    id: "item.thumbAdopted",
-    title: "採用した子をサムネイルに",
-    enabled: (s) => {
-      const v = oneVideo(s);
-      return !!v && linksOn(s) && s.rawItems.some((i) => i.parentId === v.id && i.adopted);
-    },
-    run: (s) => void setVideoThumb(oneVideo(s)!.id, { from: "adopted" }),
-  },
-  {
-    id: "item.thumbReset",
-    title: "サムネイルを動画のコマに戻す",
-    enabled: (s) => !!oneVideo(s)?.ownThumb,
-    run: (s) => void resetVideoThumb(oneVideo(s)!.id),
-  },
   { id: "folder.new", title: "新しいフォルダ", keys: ["Mod+Shift+N"], run: () => void createFolderHere() },
-  {
-    id: "text.new",
-    title: "新規テキスト",
-    keys: ["Mod+N"],
-    // Texts are of the stock (docs/TEXT.md).
-    enabled: (s) => s.mode === "stock",
-    run: () => void createText(),
-  },
   {
     id: "smart.new",
     title: "新しいスマートフォルダ",
@@ -651,8 +419,7 @@ const ALL_COMMANDS: Command[] = [
   ),
 ];
 
-/** The commands of this build: one with fewer features leaves some out (src/lib/limits.ts). */
-export const COMMANDS: Command[] = ALL_COMMANDS.filter((c) => !OFF_COMMANDS.has(c.id));
+export const COMMANDS: Command[] = ALL_COMMANDS;
 
 const byId = new Map(COMMANDS.map((c) => [c.id, c]));
 
@@ -662,21 +429,7 @@ export function command(id: string): Command {
   return c;
 }
 
-/**
- * Whether a command applies to the list at all (rotate: images only): when
- * the list holds only kinds it is for, or none of them never; else it
- * depends on the selection (rotating when only images are selected).
- */
-export const appliesTo = (c: Command, s: S) => {
-  if (!c.kinds) return true;
-  const kinds = listKinds(s);
-  if (kinds.every((k) => c.kinds!.includes(k))) return true;
-  if (!kinds.some((k) => c.kinds!.includes(k))) return false;
-  const xs = selItems(s);
-  return xs.length > 0 && xs.every((i) => c.kinds!.includes(i.kind));
-};
-
-export const isEnabled = (c: Command, s: S) => appliesTo(c, s) && (c.enabled?.(s) ?? true);
+export const isEnabled = (c: Command, s: S) => c.enabled?.(s) ?? true;
 
 export const labelOf = (c: Command, s: S) => c.label?.(s) ?? c.title;
 
@@ -748,7 +501,6 @@ export function runKey(e: KeyboardEvent): boolean {
   const s = useStore.getState();
   for (const c of COMMANDS) {
     if ((c.keyBy ?? "grid") !== "grid" || !c.keys?.some((k) => comboMatches(k, e))) continue;
-    if (!appliesTo(c, s)) continue;
     e.preventDefault();
     if (c.enabled?.(s) ?? true) runFrom(c, s, "key");
     return true;

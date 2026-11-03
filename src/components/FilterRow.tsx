@@ -9,20 +9,18 @@ import { Check, ChevronDown, Ellipsis, FolderSearch, ListFilter, Search, X } fro
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { cancelSmartEdit, createSmartFolder, saveEditedSmartFolder } from "../lib/actions";
-import { api, kindLabel, type Facets, type Filter, type Rule, type Shape } from "../lib/api";
+import { api, type Facets, type Filter, type Rule } from "../lib/api";
 import { colorHex } from "../lib/colors";
 import { composing } from "../lib/ime";
 import {
   DATE_PRESETS,
   describeDate,
-  describeDims,
   describeSize,
-  SHAPE_LABEL,
   SIZE_PRESETS,
   startOfToday,
 } from "../lib/rule";
 import { FontConditions } from "../features/fonts/FontFilters";
-import { activeConditions, CLEARED, listHasPixels, listQuery, useStore, type ConditionKey } from "../store";
+import { activeConditions, CLEARED, listQuery, useStore, type ConditionKey } from "../store";
 import { RangeCalendar } from "./RangeCalendar";
 import { Dropdown } from "./ViewMenu";
 import { systemFacetCounts } from "../features/fonts/system";
@@ -265,7 +263,6 @@ const condOf = (r: Rule): Cond => ({ tagFilter: r.tagIds, tagMatchAll: r.tagMatc
  * first one in the same place whatever the view (docs/UI.md).
  */
 export function FilterRow({ viewControls, display }: { viewControls?: React.ReactNode; display?: React.ReactNode }) {
-  const mode = useStore((s) => s.mode);
   const smart = useStore((s) => (s.view.kind === "smart" ? s.smartFolders.find((f) => f.id === (s.view as { id: string }).id) : undefined));
   const editing = useStore((s) => s.editingSmart);
   const own = useStore(
@@ -300,22 +297,10 @@ export function FilterRow({ viewControls, display }: { viewControls?: React.Reac
       )}
       <RatingCondition {...common} />
       <TagCondition {...common} />
-      {mode === "stock" ? (
-        <>
-          <ExtCondition {...common} />
-          <DimsCondition {...common} />
-          <DateCondition {...common} />
-          <SizeCondition {...common} />
-          <LinksCondition {...common} />
-          <KindCondition {...common} />
-        </>
-      ) : (
-        <>
-          <FontConditions {...common} />
-          <ExtCondition {...common} />
-          <DateCondition {...common} />
-        </>
-      )}
+      <FontConditions {...common} />
+      <ExtCondition {...common} />
+      <DateCondition {...common} />
+      <SizeCondition {...common} />
       </div>
       {/* This view's own controls, right of the conditions so that nothing
           further right moves when the view changes (docs/UI.md). */}
@@ -541,71 +526,6 @@ function TagMenu({ open, picked, toggle }: { open: boolean; picked: number[]; to
   );
 }
 
-/**
- * The kinds of an open smart folder's rule, shown (locked) last in the row.
- * The kinds picked otherwise are the sidebar's range, not a condition here
- * (docs/KINDS.md).
- */
-function KindCondition({ cond, locked, onLocked }: CondProps) {
-  const picked = cond.filter.kinds;
-  if (!locked || !picked.length) return null;
-  return (
-    <Pill label="種類" value={picked.map(kindLabel).join("・")} locked onLocked={onLocked} onClear={() => {}}>
-      {() => null}
-    </Pill>
-  );
-}
-
-type LinkRole = "parent" | "child" | "none";
-const LINK_ROLES: { role: LinkRole; label: string; filter: Partial<Filter> }[] = [
-  { role: "parent", label: "子を持つもの（親）", filter: { parentsOnly: true, childrenOnly: false, unlinkedOnly: false } },
-  { role: "child", label: "子（親に紐づいている）", filter: { parentsOnly: false, childrenOnly: true, unlinkedOnly: false } },
-  { role: "none", label: "紐づけなし", filter: { parentsOnly: false, childrenOnly: false, unlinkedOnly: true } },
-];
-const linkRole = (f: Filter): LinkRole | null => (f.parentsOnly ? "parent" : f.childrenOnly ? "child" : f.unlinkedOnly ? "none" : null);
-
-/**
- * How items are linked (docs/LINKS.md): parents, children, or not linked. Last in the row,
- * so the others stay put whether the library uses links or not; with links off it's
- * there only to be cleared.
- */
-function LinksCondition({ cond, locked, onLocked }: CondProps) {
-  const links = useStore((s) => s.librarySettings.links);
-  const setFilter = useStore((s) => s.setFilter);
-  const role = linkRole(cond.filter);
-  const notForSystem = useNotForSystem("親子の紐づけ");
-  if (!links && !role) return null;
-  return (
-    <Pill
-      {...notForSystem}
-      label="紐づけ"
-      value={LINK_ROLES.find((r) => r.role === role)?.label.replace(/（.*）/, "") ?? ""}
-      locked={locked}
-      onLocked={onLocked}
-      onClear={() => setFilter(CLEARED.parents.filter!)}
-      width="w-56"
-    >
-      {(open, close) => (
-        <LinksMenu open={open} role={role} pick={(r) => (setFilter(r ? LINK_ROLES.find((x) => x.role === r)!.filter : CLEARED.parents.filter!), close())} />
-      )}
-    </Pill>
-  );
-}
-
-function LinksMenu({ open, role, pick }: { open: boolean; role: LinkRole | null; pick: (r: LinkRole | null) => void }) {
-  const facets = useFacets("parents", open);
-  const count = (r: LinkRole) => (facets ? { parent: facets.parents, child: facets.children, none: facets.unlinked }[r] : null);
-  return (
-    <>
-      {LINK_ROLES.map(({ role: r, label }) => (
-        <Option key={r} single on={role === r} count={count(r)} onClick={() => pick(role === r ? null : r)}>
-          {label}
-        </Option>
-      ))}
-    </>
-  );
-}
-
 function ExtCondition({ cond, locked, onLocked }: CondProps) {
   const setFilter = useStore((s) => s.setFilter);
   const picked = cond.filter.exts;
@@ -635,61 +555,6 @@ function ExtMenu({ open, picked, pick }: { open: boolean; picked: string[]; pick
           <span className="uppercase">{ext}</span>
         </Option>
       ))}
-    </>
-  );
-}
-
-/** Shape and pixel size, of images: usable when the list is of images alone. */
-function DimsCondition({ cond, locked, onLocked }: CondProps) {
-  const setFilter = useStore((s) => s.setFilter);
-  // Images and videos have a pixel size; the other kinds are 0 × 0 (docs/KINDS.md).
-  const sized = useStore((s) => listHasPixels(s));
-  const f = cond.filter;
-  const value = [f.shapes.map((x) => SHAPE_LABEL[x]).join("・"), describeDims(f)].filter(Boolean).join(" ");
-  return (
-    <Pill
-      label="サイズ（px）"
-      value={value}
-      disabled={!sized && !value}
-      title={
-        !sized && !value ? "画像と動画だけの一覧で使えます（サイドバーの「種類で絞る」で画像・動画を選ぶ）" : undefined
-      }
-      locked={locked}
-      onLocked={onLocked}
-      onClear={() => setFilter(CLEARED.dims.filter!)}
-      width="w-72"
-    >
-      {(open) => <DimsMenu open={open} f={f} />}
-    </Pill>
-  );
-}
-
-function DimsMenu({ open, f }: { open: boolean; f: Filter }) {
-  const setFilter = useStore((s) => s.setFilter);
-  const facets = useFacets("dims", open);
-  return (
-    <>
-      {(Object.keys(SHAPE_LABEL) as Shape[]).map((sh) => (
-        <Option
-          key={sh}
-          on={f.shapes.includes(sh)}
-          count={facets ? (facets.shapes[sh] ?? 0) : null}
-          onClick={() => setFilter({ shapes: toggled(f.shapes, sh) })}
-        >
-          {SHAPE_LABEL[sh]}
-        </Option>
-      ))}
-      <div className="mt-1 grid grid-cols-[auto_auto_auto_auto] items-center gap-1.5 border-t border-line p-2">
-        <span className="text-dim">幅</span>
-        <NumField value={f.minWidth} onChange={(v) => setFilter({ minWidth: v })} placeholder="最小" />
-        <span className="text-dim">〜</span>
-        <NumField value={f.maxWidth} onChange={(v) => setFilter({ maxWidth: v })} placeholder="最大" />
-        <span className="text-dim">高さ</span>
-        <NumField value={f.minHeight} onChange={(v) => setFilter({ minHeight: v })} placeholder="最小" />
-        <span className="text-dim">〜</span>
-        <NumField value={f.maxHeight} onChange={(v) => setFilter({ maxHeight: v })} placeholder="最大" />
-        <span className="col-span-4 pt-1 text-[11px] text-dim">px。空欄は制限なし</span>
-      </div>
     </>
   );
 }

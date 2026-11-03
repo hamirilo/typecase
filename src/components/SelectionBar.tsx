@@ -1,7 +1,6 @@
 import { Download, FolderInput, MoreHorizontal, Trash2, X } from "lucide-react";
-import { RotateLeft, RotateRight } from "../lib/icons";
-import { deleteSelection, exportSelection, orient } from "../lib/actions";
-import { appliesTo, command, isEnabled } from "../lib/commands";
+import { deleteSelection, exportSelection } from "../lib/actions";
+import { command, isEnabled } from "../lib/commands";
 import { comboText } from "../lib/shortcuts";
 import { isSystemId } from "../lib/api";
 import { useStore } from "../store";
@@ -9,7 +8,7 @@ import { showItemMenu } from "./Grid";
 
 /**
  * Operations on a selection of two or more, a bar floating at the bottom of the list (docs/MENUS.md §7).
- * Left to right: what is selected, the everyday operations (favorite, tray, rotate,
+ * Left to right: what is selected, the everyday operations (favorite, shelf,
  * move, export), "…" for the full right-click menu, and — apart behind a divider, in
  * red with its name — the trash, so it isn't hit by mistake while reaching for the rest.
  */
@@ -22,7 +21,6 @@ export function SelectionBar() {
   // the right-click menu. The bar is for acting on several at once.
   if (count < 2 || isTrash) return null;
   const ids = [...state.selected];
-  const rotatable = appliesTo(command("item.rotateCw"), state);
   // Installed fonts are only looked at (docs/SYSTEM_FONTS.md).
   const system = ids.some(isSystemId);
   const readOnly = system ? "（この端末のフォントは読み取り専用です）" : "";
@@ -68,16 +66,6 @@ export function SelectionBar() {
         <Sep />
         {cmd("item.favorite")}
         {cmd("item.tray")}
-        {rotatable && (
-          <>
-            <Btn title={`左に回転（${comboText("Mod+Shift+L")}）`} onClick={() => orient(ids, "rotateCcw")}>
-              <RotateLeft size={15} />
-            </Btn>
-            <Btn title={`右に回転（${comboText("Mod+Shift+R")}）`} onClick={() => orient(ids, "rotateCw")}>
-              <RotateRight size={15} />
-            </Btn>
-          </>
-        )}
         <Sep />
         <Btn
           title={`フォルダへ移動…（${comboText("Mod+Shift+J")}）${readOnly}`}

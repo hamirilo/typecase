@@ -1,42 +1,21 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
-import {
-  ChevronLeft,
-  ChevronRight,
-  ExternalLink,
-  Focus,
-  Folder as FolderIcon,
-  GalleryHorizontal,
-  Info,
-  Maximize,
-  Minus,
-  Plus,
-  X,
-} from "lucide-react";
-import { RotateLeft, RotateRight } from "../lib/icons";
+import { ChevronLeft, ChevronRight, Focus, Folder as FolderIcon, GalleryHorizontal, Info, X } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { openSelection, orient, setRating, toggleFavorite, togglePinned, toggleTray } from "../lib/actions";
-import { formatBytes, isSystemId, sizeLabel, orientTransform, type Item } from "../lib/api";
+import { setRating, toggleFavorite, togglePinned, toggleTray } from "../lib/actions";
+import { formatBytes, isSystemId, type Item } from "../lib/api";
 import { colorHex } from "../lib/colors";
 import { folderPaths } from "../lib/grouping";
 import { dragRegion } from "../lib/titleBar";
 import { useStore } from "../store";
 import { FontView } from "../features/fonts/FontView";
 import { FontMark } from "../features/fonts/ShelfChip";
-import { FileView } from "../features/files/FileView";
-import { VideoView } from "../features/videos/VideoView";
-import { BookmarkView } from "../features/bookmarks/BookmarkView";
-import { TextView } from "../features/texts/TextView";
 import { FlagButtons } from "./Inspector";
 import { RatingStars } from "./RatingStars";
 
-const MIN = 0.05;
-const MAX = 16;
-const STEP = 1.25;
-
-/** How long the image-only view's "H to show" note stays. */
+/** How long the font-only view's "H to show" note stays. */
 const HINT_MS = 2200;
 
-/** How long the image-only view's restore button stays after the pointer stops. */
+/** How long the font-only view's restore button stays after the pointer stops. */
 const PEEK_MS = 1500;
 
 /** Filmstrip thumbnail size and pitch (size + gap). */
@@ -53,23 +32,15 @@ export function Viewer() {
   const toggleStrip = useStore((s) => s.toggleViewerStrip);
   const bare = useStore((s) => s.viewerBare);
   const toggleBare = useStore((s) => s.toggleViewerBare);
-  // A note of how to get the controls back, shortly after the image-only view starts.
+  // A note of how to get the controls back, shortly after the font-only view starts.
   const [hint, setHint] = useState(0);
-  // In the image-only view, moving the pointer brings up a button to get the controls back.
+  // In the font-only view, moving the pointer brings up a button to get the controls back.
   const [peek, setPeek] = useState(false);
   const peekTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const hoverPeek = useRef(false);
   const item = index !== null ? items[index] : undefined;
-  const boxRef = useRef<HTMLDivElement>(null);
-  const [box, setBox] = useState({ w: 0, h: 0 });
-  // "fit" follows the window size; a number is a fixed zoom level.
-  const [zoom, setZoom] = useState<number | "fit">("fit");
-  const suppressClick = useRef(false);
 
   const open = item !== undefined;
-  // Fonts, files and texts get their own body (sample text, document, text) instead of the zoomable image.
-  const isImage = item?.kind === "image";
-  useEffect(() => setZoom("fit"), [item?.id]);
   useEffect(() => {
     if (!open || !bare) return setHint(0);
     setHint((n) => n + 1);
@@ -94,50 +65,6 @@ export function Viewer() {
       clearTimeout(peekTimer.current);
     };
   }, [open, bare]);
-
-  useLayoutEffect(() => {
-    const el = boxRef.current;
-    if (!el) return;
-    const ro = new ResizeObserver(() => setBox({ w: el.clientWidth, h: el.clientHeight }));
-    ro.observe(el);
-    setBox({ w: el.clientWidth, h: el.clientHeight });
-    return () => ro.disconnect();
-  }, [open, isImage]);
-
-  const pad = 32;
-  const fitScale = item
-    ? Math.min(1, (box.w - pad) / item.width, (box.h - pad) / item.height)
-    : 1;
-  const scale = zoom === "fit" ? fitScale : zoom;
-
-  /** Zooms keeping the point under (cx, cy) — or the centre — in place. */
-  const zoomTo = useCallback(
-    (next: number, cx?: number, cy?: number) => {
-      const el = boxRef.current;
-      if (!el || !item) return;
-      const target = Math.min(MAX, Math.max(MIN, next));
-      const rect = el.getBoundingClientRect();
-      const px = (cx ?? rect.left + rect.width / 2) - rect.left;
-      const py = (cy ?? rect.top + rect.height / 2) - rect.top;
-      // Content coordinates of the anchor before zooming (image is centred when smaller).
-      const imgW = item.width * scale;
-      const imgH = item.height * scale;
-      const offX = Math.max(0, (el.clientWidth - imgW) / 2);
-      const offY = Math.max(0, (el.clientHeight - imgH) / 2);
-      const rx = (el.scrollLeft + px - offX) / imgW;
-      const ry = (el.scrollTop + py - offY) / imgH;
-      setZoom(target);
-      requestAnimationFrame(() => {
-        const nW = item.width * target;
-        const nH = item.height * target;
-        const nOffX = Math.max(0, (el.clientWidth - nW) / 2);
-        const nOffY = Math.max(0, (el.clientHeight - nH) / 2);
-        el.scrollLeft = rx * nW + nOffX - px;
-        el.scrollTop = ry * nH + nOffY - py;
-      });
-    },
-    [item, scale],
-  );
 
   /** Shows item `i` and makes it the selection (so the grid follows). */
   const show = useCallback(
@@ -164,19 +91,7 @@ export function Viewer() {
         if (e.shiftKey && index < items.length - 1) go(1);
         return;
       }
-      if (mod && (e.key === "=" || e.key === "+" || e.key === ";")) {
-        e.preventDefault();
-        zoomTo(scale * STEP);
-      } else if (mod && e.key === "-") {
-        e.preventDefault();
-        zoomTo(scale / STEP);
-      } else if (mod && e.key === "0") {
-        e.preventDefault();
-        zoomTo(1);
-      } else if (mod && e.key === "9") {
-        e.preventDefault();
-        setZoom("fit");
-      } else if (e.key === "Escape" || e.key === " " || e.key === "Enter") {
+      if (e.key === "Escape" || e.key === " " || e.key === "Enter") {
         e.preventDefault();
         openViewer(null);
       } else if (e.key === "ArrowLeft" || e.key === "ArrowUp" || (!mod && e.code === "KeyA")) {
@@ -191,11 +106,6 @@ export function Viewer() {
       } else if (e.key === "End") {
         e.preventDefault();
         show(items.length - 1);
-      } else if (mod && e.shiftKey && (e.code === "KeyR" || e.code === "KeyL")) {
-        e.preventDefault();
-        void orient([item.id], e.code === "KeyR" ? "rotateCw" : "rotateCcw");
-      } else if (!mod && !e.shiftKey && e.code === "KeyZ") {
-        setZoom((z) => (z === "fit" ? 1 : "fit"));
       } else if (!mod && !e.shiftKey && e.code === "KeyF") {
         void toggleFavorite([item.id]);
       } else if (!mod && !e.shiftKey && e.code === "KeyP") {
@@ -212,51 +122,13 @@ export function Viewer() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [index, item, items, openViewer, scale, zoomTo, show, toggleInfo, toggleStrip, toggleBare]);
-
-  // Option/Ctrl + wheel (and trackpad pinch, which arrives as ctrl+wheel) zooms.
-  useEffect(() => {
-    const el = boxRef.current;
-    if (!el) return;
-    const onWheel = (e: WheelEvent) => {
-      if (!e.altKey && !e.ctrlKey) return;
-      e.preventDefault();
-      zoomTo(scale * Math.exp(-e.deltaY * 0.0025), e.clientX, e.clientY);
-    };
-    el.addEventListener("wheel", onWheel, { passive: false });
-    return () => el.removeEventListener("wheel", onWheel);
-  }, [scale, zoomTo]);
-
-  // Drag to pan when the image is larger than the window.
-  const onPointerDown = (e: React.PointerEvent) => {
-    const el = boxRef.current;
-    if (!el || e.button !== 0) return;
-    const sx = e.clientX;
-    const sy = e.clientY;
-    const sl = el.scrollLeft;
-    const st = el.scrollTop;
-    suppressClick.current = false;
-    const move = (ev: PointerEvent) => {
-      if (Math.hypot(ev.clientX - sx, ev.clientY - sy) > 3) suppressClick.current = true;
-      el.scrollLeft = sl - (ev.clientX - sx);
-      el.scrollTop = st - (ev.clientY - sy);
-    };
-    const up = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
-  };
+  }, [index, item, items, openViewer, show, toggleInfo, toggleStrip, toggleBare]);
 
   if (!item || index === null) return null;
   const nav =
     "absolute top-1/2 -translate-y-1/2 rounded-full bg-black/40 p-2 text-white/80 hover:bg-black/70 hover:text-white disabled:invisible";
   const tool = "rounded p-1 text-white/70 hover:bg-white/10 hover:text-white";
   const toggle = (on: boolean) => `${tool} ${on ? "bg-white/10 text-accent hover:text-accent" : ""}`;
-  const larger = item.width * scale > box.w || item.height * scale > box.h;
-  // Turned a quarter: the file's own width is the displayed height.
-  const sideways = item.rotation % 2 === 1;
 
   return (
     <div className={`fixed inset-0 z-40 flex animate-fade-in flex-col ${bare ? "bg-black" : "bg-black/95"}`}>
@@ -269,48 +141,7 @@ export function Viewer() {
           style={{ paddingLeft: "max(1rem, var(--traffic-lights))", minHeight: "calc(var(--titlebar) + 8px)" }}
         >
           <span className="min-w-0 flex-1 truncate">{item.name}</span>
-          <span className="text-xs text-white/40 tabular-nums">
-            {sizeLabel(item)}
-          </span>
-          {(item.kind === "file" || item.kind === "text" || item.kind === "video" || item.kind === "bookmark") && (
-            <button className={tool} title={item.kind === "bookmark" ? "ブラウザで開く" : "既定のアプリで開く"} onClick={() => openSelection([item.id])}>
-              <ExternalLink size={15} />
-            </button>
-          )}
-          {isImage && (
-            <>
-              <div className="flex items-center gap-1">
-                <button className={tool} title="左に回転（⌘⇧L）" onClick={() => orient([item.id], "rotateCcw", { quiet: true })}>
-                  <RotateLeft size={15} />
-                </button>
-                <button className={tool} title="右に回転（⌘⇧R）" onClick={() => orient([item.id], "rotateCw", { quiet: true })}>
-                  <RotateRight size={15} />
-                </button>
-              </div>
-              <div className="flex items-center gap-1">
-                <button className={tool} title="縮小（⌘-）" onClick={() => zoomTo(scale / STEP)}>
-                  <Minus size={16} />
-                </button>
-                <button
-                  className="w-14 rounded px-1 text-center text-xs tabular-nums hover:bg-white/10"
-                  title="実寸（⌘0）"
-                  onClick={() => zoomTo(1)}
-                >
-                  {Math.round(scale * 100)}%
-                </button>
-                <button className={tool} title="拡大（⌘+）" onClick={() => zoomTo(scale * STEP)}>
-                  <Plus size={16} />
-                </button>
-                <button
-                  className={`${tool} ${zoom === "fit" ? "text-accent" : ""}`}
-                  title="全体を表示（⌘9）"
-                  onClick={() => setZoom("fit")}
-                >
-                  <Maximize size={15} />
-                </button>
-              </div>
-            </>
-          )}
+          {item.fontFamily && <span className="text-xs text-white/40">{item.fontFamily}</span>}
           <span className="tabular-nums text-white/50">
             {index + 1} / {items.length}
           </span>
@@ -321,7 +152,7 @@ export function Viewer() {
             <button className={toggle(showInfo)} title="詳細（I）" onClick={toggleInfo}>
               <Info size={16} />
             </button>
-            <button className={tool} title="画像のみ表示（H）" onClick={toggleBare}>
+            <button className={tool} title="フォントのみ表示（H）" onClick={toggleBare}>
               <Focus size={16} />
             </button>
           </div>
@@ -332,55 +163,7 @@ export function Viewer() {
       )}
       <div className="flex min-h-0 flex-1">
         <div className="relative min-h-0 min-w-0 flex-1">
-          {item.kind === "font" ? (
-            <FontView item={item} />
-          ) : item.kind === "file" ? (
-            <FileView item={item} />
-          ) : item.kind === "text" ? (
-            <TextView key={item.id} item={item} />
-          ) : item.kind === "video" ? (
-            <VideoView item={item} />
-          ) : item.kind === "bookmark" ? (
-            <BookmarkView item={item} />
-          ) : (
-            <div
-              ref={boxRef}
-              className={`absolute inset-0 flex overflow-auto ${larger ? "cursor-grab active:cursor-grabbing" : ""}`}
-              onPointerDown={larger ? onPointerDown : undefined}
-              onClick={(e) => {
-                // Clicking the empty backdrop closes, like before.
-                if (e.target === e.currentTarget && !suppressClick.current) openViewer(null);
-              }}
-            >
-              {/* The box has the displayed (turned) size; the original file inside is rotated to fill it. */}
-              <div
-                key={item.id}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (suppressClick.current) return;
-                  // Click toggles fit ↔ 100% around the clicked point.
-                  if (zoom === "fit" && fitScale < 1) zoomTo(1, e.clientX, e.clientY);
-                  else setZoom("fit");
-                }}
-                style={{ width: item.width * scale, height: item.height * scale }}
-                className={`relative m-auto shrink-0 animate-zoom-in ${
-                  larger ? "" : zoom === "fit" && fitScale < 1 ? "cursor-zoom-in" : "cursor-zoom-out"
-                }`}
-              >
-                <img
-                  src={convertFileSrc(item.displayPath)}
-                  alt={item.name}
-                  draggable={false}
-                  style={{
-                    width: (sideways ? item.height : item.width) * scale,
-                    height: (sideways ? item.width : item.height) * scale,
-                    transform: `translate(-50%, -50%) ${orientTransform(item)}`,
-                  }}
-                  className="absolute top-1/2 left-1/2 max-w-none"
-                />
-              </div>
-            </div>
-          )}
+          <FontView item={item} />
           {!bare && (
             <>
               <button className={`${nav} left-4`} disabled={index === 0} onClick={() => show(index - 1)}>
@@ -437,7 +220,7 @@ export function Viewer() {
   );
 }
 
-/** Side panel: the image's details, with rating / favourite / pin editable. */
+/** Side panel: the font's details, with rating / favourite / pin editable. */
 function Details({ item, items }: { item: Item; items: Item[] }) {
   const tags = useStore((s) => s.tags);
   const folders = useStore((s) => s.folders);
@@ -456,10 +239,12 @@ function Details({ item, items }: { item: Item; items: Item[] }) {
           {item.name}
         </div>
         <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs text-white/70">
-          <dt className="text-white/45">{item.kind === "image" || item.kind === "video" ? "サイズ" : "種類"}</dt>
-          <dd className="tabular-nums">
-            {sizeLabel(item)}
-          </dd>
+          {item.fontFamily && (
+            <>
+              <dt className="text-white/45">ファミリー</dt>
+              <dd>{item.fontFamily}</dd>
+            </>
+          )}
           <dt className="text-white/45">形式</dt>
           <dd>
             {item.ext.toUpperCase()} · {formatBytes(item.size)}
@@ -536,12 +321,7 @@ function Details({ item, items }: { item: Item; items: Item[] }) {
             <br />F お気に入り / P ピン留め /{" "}
           </>
         )}
-        I 詳細 / T サムネイル / H 画像のみ
-        {item.kind === "image" && (
-          <>
-            <br />⌘⇧L / ⌘⇧R 左右に回転
-          </>
-        )}
+        I 詳細 / T サムネイル / H フォントのみ
       </p>
     </aside>
   );

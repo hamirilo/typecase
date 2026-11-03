@@ -1,38 +1,32 @@
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { ImageDown } from "lucide-react";
+import { FilePlus2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ContextMenu } from "./components/ContextMenu";
 import { ResizeHandle } from "./components/ResizeHandle";
 import { DragLayer } from "./components/DragLayer";
-import { DuplicateReview } from "./components/DuplicateReview";
 import { FolderPicker } from "./components/FolderPicker";
-import { ParentPicker } from "./components/ParentPicker";
 import { Grid } from "./components/Grid";
 import { DetailsPanel, useShelfPeek } from "./components/DetailsPanel";
 import { Sidebar } from "./components/Sidebar";
 import { Toasts } from "./components/Toasts";
 import { SelectionBar } from "./components/SelectionBar";
-import { ImageCompare } from "./components/ImageCompare";
 import { CompareView } from "./features/fonts/CompareView";
-import { pasteBookmark, pastedUrl } from "./features/bookmarks/actions";
-import { pasteText } from "./features/texts/actions";
 import { ActionHud } from "./components/ActionHud";
 import { Toolbar } from "./components/Toolbar";
 import { Viewer } from "./components/Viewer";
-import { SheetDialog } from "./components/SheetDialog";
 import { ShortcutHelp } from "./components/ShortcutHelp";
 import { TransferDialog } from "./components/TransferDialog";
 import { SettingsDialog } from "./components/SettingsDialog";
 import { ExportDialog } from "./components/ExportDialog";
 import { Welcome } from "./components/Welcome";
 import { importClipboardFiles, importPaths } from "./lib/actions";
-import { api, type ImportSummary } from "./lib/api";
+import { api } from "./lib/api";
 import { dragRegion } from "./lib/titleBar";
 import { loadAppVersion, scheduleUpdateCheck } from "./lib/update";
 import { installMenuBar } from "./lib/menuBar";
 import { openGuarded } from "./lib/libraryLock";
-import { notifyOtherMode, notifyUnusedKinds, useStore } from "./store";
+import { useStore } from "./store";
 
 /** Sidebar folder under a native file drag (position is in physical pixels). */
 function folderAt(pos: { x: number; y: number }): string | null {
@@ -47,7 +41,6 @@ export default function App() {
   const inspectorOpen = useStore((s) => s.inspectorOpen);
   const sidebarOpen = useStore((s) => s.sidebarOpen);
   const comparing = useStore((s) => s.comparing);
-  const fontMode = useStore((s) => s.mode === "font");
   const sidebarWidth = useStore((s) => s.sidebarWidth);
   const inspectorWidth = useStore((s) => s.inspectorWidth);
   // A panel's edge is being dragged: no width animation.
@@ -72,38 +65,6 @@ export default function App() {
 
   // The menu bar (macOS and Windows), made from the command table.
   useEffect(() => installMenuBar(), []);
-
-  // Saved from the browser extension (src-tauri/src/webimport.rs). A batch
-  // from the extension's image list arrives one by one: report it once.
-  useEffect(() => {
-    let added = 0;
-    let known = 0;
-    let kinds: Record<string, number> = {};
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const unlisten = listen<ImportSummary>("web-import", (e) => {
-      added += e.payload.imported;
-      known += e.payload.duplicates;
-      for (const [k, n] of Object.entries(e.payload.kinds ?? {})) kinds[k] = (kinds[k] ?? 0) + (n ?? 0);
-      clearTimeout(timer);
-      timer = setTimeout(() => {
-        const s = useStore.getState();
-        s.refresh();
-        s.notify({
-          title: added ? `ブラウザから ${added} 件を追加しました` : "ブラウザから追加されたものはありません",
-          detail: known ? `${known} 件はすでにライブラリにあります` : undefined,
-          kind: added ? "success" : "info",
-        });
-        notifyUnusedKinds(kinds);
-        notifyOtherMode(kinds);
-        added = known = 0;
-        kinds = {};
-      }, 800);
-    });
-    return () => {
-      clearTimeout(timer);
-      unlisten.then((f) => f());
-    };
-  }, []);
 
   // Files dropped from Finder / Explorer.
   useEffect(() => {
@@ -139,17 +100,6 @@ export default function App() {
       if (files.length) {
         e.preventDefault();
         importClipboardFiles(files);
-        return;
-      }
-      // A URL alone becomes a bookmark (docs/BOOKMARKS.md); other words a new text (docs/TEXT.md).
-      const text = e.clipboardData?.getData("text/plain") ?? "";
-      const url = pastedUrl(text);
-      if (url) {
-        e.preventDefault();
-        void pasteBookmark(url);
-      } else if (text.trim()) {
-        e.preventDefault();
-        void pasteText(text);
       }
     };
     window.addEventListener("paste", onPaste);
@@ -176,7 +126,7 @@ export default function App() {
             <Toolbar />
             {/* The selection bar floats over the list (or the comparison). */}
             <div className="relative flex min-h-0 flex-1 flex-col">
-              {comparing ? fontMode ? <CompareView /> : <ImageCompare /> : <Grid />}
+              {comparing ? <CompareView /> : <Grid />}
               {!comparing && <SelectionBar />}
             </div>
             {/* The panel is closed: the shelf comes over the list for the drag, not pushing it aside. */}
@@ -207,7 +157,7 @@ export default function App() {
           }`}
         >
           <div className="flex animate-zoom-in items-center gap-2 rounded-lg bg-raised px-5 py-3 text-base shadow-xl">
-            <ImageDown size={20} className="text-accent" />
+            <FilePlus2 size={20} className="text-accent" />
             {fileTarget
               ? `「${folders.find((f) => `folder:${f.id}` === fileTarget)?.name ?? ""}」に追加`
               : "ドロップして追加"}
@@ -216,9 +166,6 @@ export default function App() {
       )}
       <Viewer />
       <FolderPicker />
-      <ParentPicker />
-      <DuplicateReview />
-      <SheetDialog />
       <TransferDialog />
       <ExportDialog />
       <SettingsDialog />

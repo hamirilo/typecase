@@ -1,49 +1,19 @@
 // The settings screen (⌘,), see docs/SETTINGS.md: the app's pages (一般,
 // サイドバー; settings.json and this PC), then the open
-// library's (概要, 種類, 親子の紐づけ, サイドバー; stored in its library.db). Changes are saved as
+// library's (概要, サイドバー; stored in its library.db). Changes are saved as
 // they are made. The frame and rows are SettingsFrame's, the same in every
 // tool (desktop-platform UI §9).
-import {
-  FileText,
-  NotebookText,
-  Video,
-  Bookmark,
-  FolderInput,
-  FolderOpen,
-  Image as ImageIcon,
-  Info,
-  Library,
-  Link2,
-  PanelLeft,
-  Settings,
-  Shapes,
-  Type,
-} from "lucide-react";
+import { FolderInput, FolderOpen, Info, Library, PanelLeft, Settings } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { useShallow } from "zustand/react/shallow";
-import { setLinks, transferAllOfKind } from "../lib/actions";
-import { api, formatBytes, KINDS, kindLabel, type ItemKind } from "../lib/api";
-import { sidebarEntriesOf, type SidebarHidden } from "../lib/librarySettings";
-import { MODES, modeLabel, modesFor, type Mode } from "../lib/modes";
-import { BUILD_NAME, buildHas, NO_UPDATE, OFF_SETTINGS } from "../lib/limits";
+import { transferAll } from "../lib/actions";
+import { api, formatBytes } from "../lib/api";
+import { SIDEBAR_ENTRIES, type SidebarHidden } from "../lib/librarySettings";
 import { isMac } from "../lib/shortcuts";
-import { appVersion } from "../lib/update";
-import appIcon from "../../src-tauri/icons/128x128@2x.png";
-import { sidebarHidden, usedModes, useStore, type SettingsTab } from "../store";
+import { sidebarHidden, useStore, type SettingsTab } from "../store";
 import { RadioRows, Row, RowButton, Section, SettingsFrame, type SettingsGroup } from "./SettingsFrame";
 import { UpdateSection } from "./UpdateSection";
 
 export const SETTINGS_KEY = isMac ? "⌘," : "Ctrl+,";
-
-const KIND_ICON: Record<Mode | ItemKind, React.ReactNode> = {
-  stock: <Shapes size={14} />,
-  image: <ImageIcon size={14} />,
-  font: <Type size={14} />,
-  file: <FileText size={14} />,
-  text: <NotebookText size={14} />,
-  video: <Video size={14} />,
-  bookmark: <Bookmark size={14} />,
-};
 
 type Page = { id: SettingsTab; label: string; icon: React.ReactNode };
 
@@ -56,13 +26,9 @@ const APP_PAGES: Page[] = [
 /** Saved in the open library (library.db). */
 const LIBRARY_PAGES: Page[] = [
   { id: "library", label: "概要", icon: <Info size={15} /> },
-  { id: "libraryKinds", label: "種類", icon: <Shapes size={15} /> },
-  { id: "libraryLinks", label: "親子の紐づけ", icon: <Link2 size={15} /> },
   { id: "librarySidebar", label: "サイドバー", icon: <PanelLeft size={15} /> },
 ];
 
-/** Pages of this build: one with fewer features leaves some out (src/lib/limits.ts). */
-const inBuild = (p: Page) => !OFF_SETTINGS.has(p.id);
 
 /** ⌘, opens the screen on the page shown last (or closes it). Esc is the frame's. */
 function useSettingsKeys() {
@@ -91,10 +57,10 @@ function Dialog({ tab }: { tab: SettingsTab }) {
   const close = useCallback(() => openSettings(null), [openSettings]);
 
   const groups: SettingsGroup<SettingsTab>[] = [
-    { title: "アプリ全体", pages: APP_PAGES.filter(inBuild) },
+    { title: "アプリ全体", pages: APP_PAGES },
     // Only with a library open: its settings are stored in it.
     ...(library
-      ? [{ title: `ライブラリ「${library.name}」`, sub: "このライブラリに保存", pages: LIBRARY_PAGES.filter(inBuild) }]
+      ? [{ title: `ライブラリ「${library.name}」`, sub: "このライブラリに保存", pages: LIBRARY_PAGES }]
       : []),
   ];
 
@@ -103,8 +69,6 @@ function Dialog({ tab }: { tab: SettingsTab }) {
       {tab === "general" && <GeneralPage />}
       {tab === "sidebar" && <AppSidebarPage />}
       {tab === "library" && <LibraryPage />}
-      {tab === "libraryKinds" && <LibraryKindsPage />}
-      {tab === "libraryLinks" && <LibraryLinksPage />}
       {tab === "librarySidebar" && <LibrarySidebarPage />}
     </SettingsFrame>
   );
@@ -164,33 +128,8 @@ function GeneralPage() {
           ]}
         />
       </Section>
-      {NO_UPDATE ? (
-        <VersionSection />
-      ) : (
-        <UpdateSection autoUpdate={app?.autoUpdate} onAutoUpdate={(autoUpdate) => save({ autoUpdate })} />
-      )}
+      <UpdateSection autoUpdate={app?.autoUpdate} onAutoUpdate={(autoUpdate) => save({ autoUpdate })} />
     </div>
-  );
-}
-
-/**
- * The アップデート section's stand-in in a build without in-app updates
- * (src/lib/limits.ts): which app and version this is.
- */
-function VersionSection() {
-  const version = appVersion();
-  return (
-    <Section title="バージョン">
-      <Row
-        icon={<img src={appIcon} alt="" className="size-10" draggable={false} />}
-        label={
-          <span className="font-medium">
-            {BUILD_NAME} <span className="font-normal text-dim tabular-nums">{version || "（開発版）"}</span>
-          </span>
-        }
-        hint="このビルドはアプリの中では更新しません"
-      />
-    </Section>
   );
 }
 
@@ -199,14 +138,13 @@ function VersionSection() {
 /** The library's name and place, and how much is in it. */
 function LibraryPage() {
   const library = useStore((s) => s.library);
-  const kinds = useStore((s) => s.counts.kinds);
+  const total = useStore((s) => s.counts.all + s.counts.trash);
   const [size, setSize] = useState<number | null>(null);
   useEffect(() => {
     if (library) api.librarySize().then(setSize, () => setSize(null));
   }, [library]);
 
   if (!library) return <p className="mt-8 text-center text-dim">ライブラリを開いていません</p>;
-  const total = Object.values(kinds).reduce((a, n) => a + (n ?? 0), 0);
 
   return (
     <div>
@@ -231,159 +169,46 @@ function LibraryPage() {
           </RowButton>
         </Row>
       </Section>
-    </div>
-  );
-}
-
-/** Which kinds the library uses, and moving a whole kind to another library. */
-function LibraryKindsPage() {
-  const library = useStore((s) => s.library);
-  const kinds = useStore((s) => s.counts.kinds);
-  const used = useStore(useShallow(usedModes));
-  const setUsedModes = useStore((s) => s.setUsedModes);
-  if (!library) return <p className="mt-8 text-center text-dim">ライブラリを開いていません</p>;
-  // Only the kinds this build handles (src/lib/limits.ts).
-  const offered = KINDS.filter((k) => buildHas(k.kind));
-  const dropped = offered.filter((k) => !used.includes(k.kind) && (kinds[k.kind] ?? 0) > 0);
-
-  return (
-    <div>
-      <Section
-        title="使う種類"
-        sub="使う種類が一覧と種類の絞り込みに出ます。フォントをほかの種類と使うときは、フォントを見比べる「フォント」のモードも出ます"
-      >
-        {offered.map(({ kind, label }) => {
-          const on = used.includes(kind);
-          const n = kinds[kind] ?? 0;
-          return (
-            <Check
-              key={kind}
-              checked={on}
-              // At least one kind stays.
-              disabled={on && used.length === 1}
-              onChange={(v) => setUsedModes(v ? [...used, kind] : used.filter((m) => m !== kind))}
-            >
-              {KIND_ICON[kind]}
-              {label}
-              {n > 0 && <span className="text-xs text-dim tabular-nums">（{n} 件）</span>}
-            </Check>
-          );
-        })}
+      <Section title="別のライブラリへ移す" sub="すべてのフォント（ゴミ箱のものを除く）を別のライブラリへコピー・移動します">
+        <Row label="すべてのフォント">
+          <RowButton
+            onClick={() => {
+              useStore.getState().openSettings(null);
+              transferAll();
+            }}
+          >
+            <FolderInput size={13} />
+            別のライブラリへ…
+          </RowButton>
+        </Row>
       </Section>
-      {dropped.length > 0 && (
-        <p className="mt-2 rounded-md bg-raised px-2.5 py-1.5 text-xs text-dim">
-          {dropped.map((k) => `${k.label} ${kinds[k.kind]} 件`).join("、")}
-          は一覧に出なくなります。アイテムは消えません（チェックを戻すとまた出ます）
-        </p>
-      )}
-      {/* A kind at a time (one library per kind is what moving all is for). */}
-      {KINDS.some((k) => (kinds[k.kind] ?? 0) > 0) && (
-        <Section title="別のライブラリへ移す" sub="種類ごとに、すべてのアイテムを別のライブラリへ移します">
-          {KINDS.filter((k) => (kinds[k.kind] ?? 0) > 0).map(({ kind }) => (
-            <Row
-              key={kind}
-              icon={<span className="text-dim">{KIND_ICON[kind]}</span>}
-              label={
-                <>
-                  {kindLabel(kind)}
-                  <span className="ml-1.5 text-xs text-dim tabular-nums">{kinds[kind]} 件</span>
-                </>
-              }
-            >
-              <RowButton
-                onClick={() => {
-                  useStore.getState().openSettings(null);
-                  transferAllOfKind(kind);
-                }}
-              >
-                <FolderInput size={13} />
-                すべて別のライブラリへ移す…
-              </RowButton>
-            </Row>
-          ))}
-        </Section>
-      )}
-    </div>
-  );
-}
-
-/** Parent-child links (docs/LINKS.md). */
-function LibraryLinksPage() {
-  const library = useStore((s) => s.library);
-  const links = useStore((s) => s.librarySettings.links);
-  const linksTrash = useStore((s) => s.librarySettings.linksTrash);
-  const setLinksTrash = useStore((s) => s.setLinksTrash);
-  if (!library) return <p className="mt-8 text-center text-dim">ライブラリを開いていません</p>;
-
-  return (
-    <div>
-      <Section
-        title="親子の紐づけ"
-        sub="1 つのファイルに別のファイルを紐づけます（例：動画に、サムネイル案の画像）。紐づけた項目は親のフォルダに入り、一覧では親の下にまとまります"
-      >
-        <Check
-          checked={links}
-          onChange={(v) => void setLinks(v)}
-          hint="無効にすると、すべての紐づけを外します（項目は残り、いまのフォルダにあるままふつうの項目に戻ります）"
-        >
-          親子の紐づけを使う
-        </Check>
-      </Section>
-      {links && (
-        <Section title="親をゴミ箱に入れたとき">
-          <RadioRows
-            name="linksTrash"
-            value={linksTrash}
-            options={[
-              { value: "with", label: "子も一緒にゴミ箱へ", hint: "復元も一緒です" },
-              { value: "keep", label: "子は残す", hint: "子はふつうの項目に戻り、親のフォルダに残ります（元に戻すと紐づけも戻ります）" },
-            ]}
-            onChange={setLinksTrash}
-          />
-        </Section>
-      )}
     </div>
   );
 }
 
 // ------------------------------------------------------------ サイドバー
 
-/** One column of checks per mode; `onChange` gets the mode's new hidden entries. */
+/** A check per sidebar entry; `onChange` gets the new hidden entries. */
 function SidebarChecks({
-  modes,
   hidden,
   onChange,
 }: {
-  modes: Mode[];
   hidden: SidebarHidden;
   /** Without it the checks are shown, not changed (the app's, from a library). */
-  onChange?: (mode: Mode, ids: string[]) => void;
+  onChange?: (ids: string[]) => void;
 }) {
   return (
-    <div className="grid gap-4 py-1" style={{ gridTemplateColumns: `repeat(${modes.length}, minmax(0, 1fr))` }}>
-      {modes.map((m) => {
-        const off = hidden[m] ?? [];
-        return (
-          <div key={m}>
-            {modes.length > 1 && (
-              <div className="mt-1.5 mb-0.5 flex items-center gap-1.5 px-3 text-xs font-semibold text-dim">
-                {KIND_ICON[m]}
-                {modeLabel(m)}
-              </div>
-            )}
-            {sidebarEntriesOf(m).map((e) => (
-              <Check
-                key={e.id}
-                checked={!off.includes(e.id)}
-                disabled={!onChange}
-                onChange={(show) => onChange?.(m, show ? off.filter((x) => x !== e.id) : [...off, e.id])}
-              >
-                {e.label}
-              </Check>
-            ))}
-          </div>
-        );
-      })}
+    <div className="py-1">
+      {SIDEBAR_ENTRIES.map((e) => (
+        <Check
+          key={e.id}
+          checked={!hidden.includes(e.id)}
+          disabled={!onChange}
+          onChange={(show) => onChange?.(show ? hidden.filter((x) => x !== e.id) : [...hidden, e.id])}
+        >
+          {e.label}
+        </Check>
+      ))}
     </div>
   );
 }
@@ -398,7 +223,7 @@ function AppSidebarPage() {
   return (
     <div>
       <Section title="サイドバーの項目" sub={`すべてのライブラリの既定です。${SIDEBAR_SUB}`}>
-        {loaded && <SidebarChecks modes={MODES} hidden={hidden} onChange={(m, ids) => setSidebarHidden(m, ids, "app")} />}
+        {loaded && <SidebarChecks hidden={hidden} onChange={(ids) => setSidebarHidden(ids, "app")} />}
       </Section>
       <p className="mt-3 text-xs text-dim">
         ライブラリごとに変えるときは、そのライブラリを開いて、設定のライブラリの「サイドバー」で「このライブラリだけの設定」を選びます。
@@ -411,7 +236,6 @@ function LibrarySidebarPage() {
   const library = useStore((s) => s.library);
   const own = useStore((s) => s.librarySettings.sidebarOwn);
   const hidden = useStore((s) => sidebarHidden(s));
-  const modes = useStore(useShallow((s) => modesFor(usedModes(s))));
   const setSidebarOwn = useStore((s) => s.setSidebarOwn);
   const setSidebarHidden = useStore((s) => s.setSidebarHidden);
   const openSettings = useStore((s) => s.openSettings);
@@ -431,7 +255,7 @@ function LibrarySidebarPage() {
         />
       </Section>
       <div className={`mt-3 rounded-lg border border-line py-1 ${own ? "bg-bg/40" : ""}`}>
-        <SidebarChecks modes={modes} hidden={hidden} onChange={own ? setSidebarHidden : undefined} />
+        <SidebarChecks hidden={hidden} onChange={own ? (ids) => setSidebarHidden(ids) : undefined} />
         {!own && (
           <button
             onClick={() => openSettings("sidebar")}

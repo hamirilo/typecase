@@ -5,18 +5,10 @@ import {
   fontScriptLabel,
   fontWeightLabel,
   formatBytes,
-  kindLabel,
   type Filter,
   type Rule,
-  type Shape,
   type Tag,
 } from "./api";
-
-export const SHAPE_LABEL: Record<Shape, string> = {
-  landscape: "横長",
-  portrait: "縦長",
-  square: "正方形",
-};
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -52,15 +44,6 @@ function range(min: number | null, max: number | null, fmt: (n: number) => strin
   return "";
 }
 
-export function describeDims(f: Filter): string {
-  const parts = [];
-  const w = range(f.minWidth, f.maxWidth, (n) => `${n}`);
-  const h = range(f.minHeight, f.maxHeight, (n) => `${n}`);
-  if (w) parts.push(`幅 ${w}`);
-  if (h) parts.push(`高さ ${h}`);
-  return parts.join("・");
-}
-
 export function describeDate(f: Filter): string {
   if (f.importedAfter == null && f.importedBefore == null) return "";
   const preset = f.importedBefore == null && DATE_PRESETS.find((p) => p.after() === f.importedAfter);
@@ -75,11 +58,10 @@ export function describeSize(f: Filter): string {
   return range(f.minSize, f.maxSize, formatBytes);
 }
 
-/** One short phrase per condition, e.g. ["★3以上", "形式: png", "タグ: 参考"]. */
+/** One short phrase per condition, e.g. ["★3以上", "形式: otf", "タグ: 見出し"]. */
 export function describeRule(rule: Rule, tags: Tag[]): string[] {
   const out: string[] = [];
   const f = rule.filter;
-  if (f.kinds?.length) out.push(`種類: ${f.kinds.map(kindLabel).join("・")}`);
   if (rule.search.trim()) out.push(`「${rule.search.trim()}」`);
   if (rule.tagIds.length) {
     const names = rule.tagIds.map((id) => tags.find((t) => t.id === id)?.name).filter(Boolean);
@@ -91,15 +73,9 @@ export function describeRule(rule: Rule, tags: Tag[]): string[] {
   if (f.fontWeights?.length) out.push(`太さ: ${f.fontWeights.map(fontWeightLabel).join("・")}`);
   if (f.fontFeatures?.length) out.push(`特徴: ${f.fontFeatures.map(fontFeatureLabel).join("・")}`);
   if (f.exts.length) out.push(`形式: ${f.exts.join(", ")}`);
-  if (f.shapes.length) out.push(f.shapes.map((s) => SHAPE_LABEL[s]).join("・"));
-  const dims = describeDims(f);
-  if (dims) out.push(dims);
   const date = describeDate(f);
   if (date) out.push(`追加日: ${date}`);
   const size = describeSize(f);
   if (size) out.push(`容量: ${size}`);
-  if (f.parentsOnly) out.push("紐づけ: 親");
-  if (f.childrenOnly) out.push("紐づけ: 子");
-  if (f.unlinkedOnly) out.push("紐づけ: なし");
   return out;
 }

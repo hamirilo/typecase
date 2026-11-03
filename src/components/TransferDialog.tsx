@@ -1,10 +1,10 @@
-// "別のライブラリへ": copies or moves the selection (or every item of the
-// current kind) into another library, with tags, folder, rating, favourite
+// "別のライブラリへ": copies or moves the selection (or every font) into
+// another library, with tags, folder, rating, favourite
 // and note (src-tauri/src/transfer.rs).
 import { ArrowRight, Copy, FolderInput, FolderOpen, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { createLibraryOnly, pickLibraryFolder, transferTo } from "../lib/actions";
-import { kindLabel, type LibraryEntry } from "../lib/api";
+import type { LibraryEntry } from "../lib/api";
 import { useStore, type TransferRequest } from "../store";
 import { LibraryRow, useLibraries } from "./LibrarySwitcher";
 
@@ -32,7 +32,7 @@ function Dialog({ req }: { req: TransferRequest }) {
   // Picked with "ほかのライブラリ…", not on the list yet.
   const [extra, setExtra] = useState<LibraryEntry[]>([]);
   const [dest, setDest] = useState<string | null>(null);
-  // Moving everything of a kind is a migration; a selection is more often a copy.
+  // Moving everything is a migration; a selection is more often a copy.
   const [move, setMove] = useState(req.ids === null);
 
   const targets = [...extra, ...(list ?? []).filter((l) => !l.current && !extra.some((x) => x.root === l.root))];
@@ -71,10 +71,10 @@ function Dialog({ req }: { req: TransferRequest }) {
       /* not essential */
     }
     close();
-    transferTo(target, req.ids ? { ids: req.ids } : { kind: req.kind }, move);
+    transferTo(target, req.ids, move);
   };
 
-  const what = req.ids === null ? `すべての${kindLabel(req.kind)} ${req.count} 件` : `${req.noun} ${req.count} 件`;
+  const what = req.ids === null ? `すべてのフォント ${req.count} 件` : `フォント ${req.count} 件`;
   const option = (on: boolean, icon: React.ReactNode, title: string, sub: string, value: boolean) => (
     <button
       onClick={() => setMove(value)}

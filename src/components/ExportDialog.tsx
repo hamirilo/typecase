@@ -1,6 +1,6 @@
 // 書き出し…: copies the files of a list into a folder (docs/MENUS.md §4). A
 // folder can be written with its subfolders, keeping their structure
-// ("旅行/2025/京都/…"). ライブラリ全体を書き出し… copies everything into a new
+// ("和文/ゴシック/…"). ライブラリ全体を書き出し… copies everything into a new
 // "<library name>" folder laid out like the app's folders (docs/EXPORT.md).
 // The files are copied as they are; format conversion and resizing (ROADMAP
 // phase 3) will be added to this dialog.
@@ -8,8 +8,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { FolderDown, FolderOpen } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { listTargets, writeLibrary } from "../lib/actions";
-import { api, modeOf, type Folder, type Item, type ItemKind } from "../lib/api";
-import { itemsNoun, MODES, modeLabel } from "../lib/modes";
+import { api, type Folder, type Item } from "../lib/api";
 import { notifyIfAway } from "../lib/osNotify";
 import { composing } from "../lib/ime";
 import { useStore, type ListSource } from "../store";
@@ -53,7 +52,7 @@ function remember(dest: string) {
 }
 
 /**
- * Per item, its folder relative to `rootId` as "旅行/2025/京都" (the root's
+ * Per item, its folder relative to `rootId` as "和文/ゴシック" (the root's
  * own name first); "" for items outside it.
  */
 export function relativeDirs(items: Item[], rootId: string, folders: Folder[]): string[] {
@@ -157,7 +156,7 @@ function Dialog({ source, title }: { source: ListSource; title: string }) {
       summary={
         items === null
           ? "数えています…"
-          : `${itemsNoun(items)} ${items.length} 件${isFolder && hasSubfolders && subfolders ? "（サブフォルダを含む）" : ""}`
+          : `フォント ${items.length} 件${isFolder && hasSubfolders && subfolders ? "（サブフォルダを含む）" : ""}`
       }
       ready={!!dest && !!items?.length && !busy}
       busy={busy}
@@ -182,22 +181,14 @@ function Dialog({ source, title }: { source: ListSource; title: string }) {
 
 /**
  * ライブラリ全体を書き出し: every item not in the trash, into a new
- * "<library name>" folder in "<mode>/<folders>/…". The copying runs after the
+ * "<library name>" folder in "<folders>/…". The copying runs after the
  * dialog closes, with progress and a キャンセル (`writeLibrary`).
  */
 function LibraryDialog({ title }: { title: string }) {
-  const kinds = useStore((s) => s.counts.kinds);
+  const total = useStore((s) => s.counts.all);
   const name = useStore((s) => s.library?.name ?? "");
   const [dest, setDest] = useState<string | null>(() => load(LAST_DEST));
   useEscapeToClose();
-
-  const byMode = MODES.map((m) => {
-    const n = (Object.entries(kinds) as [ItemKind, number][])
-      .filter(([k]) => modeOf(k) === m)
-      .reduce((a, [, c]) => a + c, 0);
-    return { m, n };
-  }).filter((x) => x.n > 0);
-  const total = byMode.reduce((a, x) => a + x.n, 0);
 
   const run = () => {
     if (!dest || !total) return;
@@ -209,7 +200,7 @@ function LibraryDialog({ title }: { title: string }) {
   return (
     <Frame
       title={title}
-      summary={`${total.toLocaleString()} 件${byMode.length > 1 ? `（${byMode.map((x) => `${modeLabel(x.m)} ${x.n.toLocaleString()}`).join("・")}）` : ""}`}
+      summary={`${total.toLocaleString()} 件`}
       ready={!!dest && total > 0}
       busy={false}
       run={run}
@@ -232,7 +223,7 @@ function Frame({
   children,
 }: {
   title: string;
-  /** What is written ("画像 12 件"). */
+  /** What is written ("フォント 12 件"). */
   summary: string;
   ready: boolean;
   busy: boolean;

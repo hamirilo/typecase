@@ -35,8 +35,7 @@ function flatten(folders: Folder[]): Row[] {
 
 export function FolderPicker() {
   const mode = useStore((s) => s.picker);
-  // "parent" is the ParentPicker's.
-  if (!mode || mode === "parent") return null;
+  if (!mode) return null;
   return <PickerDialog mode={mode} />;
 }
 
@@ -79,7 +78,7 @@ function PickerDialog({ mode }: { mode: "move" | "goto" }) {
   };
 
   const createAndMove = async () => {
-    const id = await api.createFolder(query.trim(), null, useStore.getState().mode).catch((e) => {
+    const id = await api.createFolder(query.trim(), null).catch((e) => {
       useStore.getState().toast(String(e), true);
       return null;
     });

@@ -1,19 +1,16 @@
-import { FlipHorizontal2, FlipVertical2, Heart, HeartOff, Pin, PinOff, Star, Undo2 } from "lucide-react";
-import { RotateLeft, RotateRight } from "../lib/icons";
+import { Heart, HeartOff, Pin, PinOff, Star } from "lucide-react";
 import { create } from "zustand";
-import type { OrientOp } from "../lib/api";
 
 /**
  * What an operation just did, for the ones that give no other sign: rating
- * with a number key, F / P, rotating. The thumbnail may not show the change
+ * with a number key, F / P. The list may not show the change
  * (ratings are hidden by default) or may be off screen, so a short note
  * appears at the bottom centre and the changed thumbnails flash once.
  * Operations done on the control itself (the heart, the stars) skip it.
  */
 export type HudContent =
   | { kind: "rating"; rating: number }
-  | { kind: "favorite" | "pin"; on: boolean }
-  | { kind: "orient"; op: OrientOp };
+  | { kind: "favorite" | "pin"; on: boolean };
 
 type HudState = {
   /** `n` restarts the animation when the same thing is done again. */
@@ -34,14 +31,6 @@ export function showHud(content: HudContent, ids: string[]) {
   // animation is cut to nothing and the note should still be read.
   setTimeout(() => seq === n && useHud.setState({ hud: null, pulse: null }), SHOWN_MS);
 }
-
-const ORIENT: Record<OrientOp, { icon: typeof Star; text: string }> = {
-  rotateCcw: { icon: RotateLeft, text: "左に回転しました" },
-  rotateCw: { icon: RotateRight, text: "右に回転しました" },
-  flipH: { icon: FlipHorizontal2, text: "左右反転しました" },
-  flipV: { icon: FlipVertical2, text: "上下反転しました" },
-  reset: { icon: Undo2, text: "元の向きに戻しました" },
-};
 
 function Body({ hud }: { hud: HudContent }) {
   switch (hud.kind) {
@@ -94,15 +83,6 @@ function Body({ hud }: { hud: HudContent }) {
           ピン留めを外しました
         </>
       );
-    case "orient": {
-      const { icon: Icon, text } = ORIENT[hud.op];
-      return (
-        <>
-          <Icon size={16} className="text-accent" />
-          {text}
-        </>
-      );
-    }
   }
 }
 

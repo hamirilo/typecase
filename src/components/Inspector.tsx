@@ -1,6 +1,5 @@
 import { colorHex } from "../lib/colors";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   ChevronDown,
   ChevronRight,
@@ -19,28 +18,11 @@ import {
   togglePinned,
   toggleTray,
 } from "../lib/actions";
-import { listNoun } from "../store";
-import {
-  api,
-  formatBytes,
-  isSystemId,
-  bitRateLabel,
-  durationLabel,
-  frameRateLabel,
-  sizeLabel,
-  urlLabel,
-  type Folder,
-  type Item,
-  type SelectionInfo,
-  type Tag,
-  type VideoCodecs,
-} from "../lib/api";
+import { api, formatBytes, isSystemId, type Folder, type Item, type SelectionInfo, type Tag } from "../lib/api";
 import { FontCategorySelect, FontDetails } from "../features/fonts/FontDetails";
 import { SystemFontPanel } from "../features/fonts/SystemFontPanel";
-import { VideoThumbField } from "../features/videos/VideoThumbField";
 import { useStore } from "../store";
 import { composing } from "../lib/ime";
-import { LinksField } from "./LinksField";
 import { RatingStars } from "./RatingStars";
 
 function folderPath(folders: Folder[], id: string): string {
@@ -152,35 +134,6 @@ function TagInput({ onAdd, exclude }: { onAdd: (names: string[]) => void; exclud
 
 const btn = "h-8 rounded-md border border-frame hover:bg-hover active:bg-press";
 
-/** A video's codecs, frame rate and bit rate, read from the file when the panel shows it. */
-function VideoCodecRows({ item }: { item: Item }) {
-  const id = item.id;
-  const [codecs, setCodecs] = useState<VideoCodecs | null>(null);
-  useEffect(() => {
-    let current = true;
-    setCodecs(null);
-    api.videoCodecs(id).then(
-      (c) => current && setCodecs(c),
-      () => current && setCodecs({ video: null, audio: null, frameRate: null }),
-    );
-    return () => {
-      current = false;
-    };
-  }, [id]);
-  return (
-    <>
-      <dt className="text-dim">映像</dt>
-      <dd>{codecs ? (codecs.video ?? "不明") : "…"}</dd>
-      <dt className="text-dim">音声</dt>
-      <dd>{codecs ? (codecs.audio ?? "なし") : "…"}</dd>
-      <dt className="text-dim">フレームレート</dt>
-      <dd className="tabular-nums">{codecs ? (codecs.frameRate ? frameRateLabel(codecs.frameRate) : "不明") : "…"}</dd>
-      <dt className="text-dim" title="ファイル全体（映像と音声）の平均">ビットレート</dt>
-      <dd className="tabular-nums">{item.durationMs ? bitRateLabel(item.size, item.durationMs) : "不明"}</dd>
-    </>
-  );
-}
-
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="mt-4">
@@ -193,7 +146,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 const SECTION_KEY = "inspector.section.";
 
 /**
- * A collapsible group (整理, 紐づけ, メモ, ファイル情報). Only the user opens or
+ * A collapsible group (整理, メモ, ファイル情報). Only the user opens or
  * closes it (docs/UI.md); the choice is remembered. Closed, the right side of
  * the heading says what is inside.
  */
@@ -412,7 +365,7 @@ export function FlagButtons({ ids, items, compact }: { ids: string[]; items: Ite
       state={tray}
       icon={<Layers size={14} />}
       label={tray ? "シェルフにあります" : "シェルフに追加"}
-      hint={tray ? "シェルフから外す（キー B）" : "シェルフ（詳細パネルのタブ）に置いて、比べる・まとめて出力・書き出し（キー B）"}
+      hint={tray ? "シェルフから外す（キー B）" : "シェルフ（詳細パネルのタブ）に置いて比べる（キー B）"}
       activeClass="border-emerald-500/60 bg-emerald-500/15 text-emerald-400"
       onClick={() => toggleTray(ids)}
     />
@@ -451,8 +404,6 @@ export function Inspector() {
   const rev = useStore((s) => s.rev);
   const run = useStore((s) => s.run);
   const isTrash = useStore((s) => s.view.kind === "trash");
-  const stock = useStore((s) => s.mode === "stock");
-  const noun = useStore(listNoun);
   const [info, setInfo] = useState<SelectionInfo>({ tags: [], folders: [] });
   const [adding, setAdding] = useState(false);
 
@@ -466,8 +417,6 @@ export function Inspector() {
     [items, selected],
   );
   const renameSeq = useStore((s) => s.renameItemSeq);
-  const linksOn = useStore((s) => s.librarySettings.links);
-  const rawItems = useStore((s) => s.rawItems);
   // Common rating of the selection, or null when mixed.
   const rating = useMemo(() => {
     const rs = new Set(items.filter((i) => selected.has(i.id)).map((i) => i.rating));
@@ -499,7 +448,7 @@ export function Inspector() {
 
   if (!ids.length) {
     return (
-      <div className="flex min-h-0 flex-1 items-center justify-center text-dim">{noun}を選択してください</div>
+      <div className="flex min-h-0 flex-1 items-center justify-center text-dim">フォントを選択してください</div>
     );
   }
 
@@ -515,8 +464,6 @@ export function Inspector() {
   const unusedFolders = folders.filter((f) => !info.folders.some((x) => x.id === f.id && x.count === n));
 
   // What each closed section says on its heading.
-  const childCount = single ? rawItems.filter((i) => i.parentId === single.id).length : 0;
-  const linksSummary = !linksOn ? "無効" : single?.parentId ? "親あり" : childCount ? `子 ${childCount} 件` : "なし";
   const organizeSummary = `${info.tags.length ? `タグ ${info.tags.length}` : "タグなし"} · ${
     info.folders.length === 0
       ? "未分類"
@@ -524,13 +471,7 @@ export function Inspector() {
         ? folderPath(folders, info.folders[0].id)
         : `${info.folders.length} フォルダ`
   }`;
-  const facts = single
-    ? [
-        sizeLabel(single),
-        single.kind !== "bookmark" && `${single.ext.toUpperCase()} · ${formatBytes(single.size)}`,
-        single.kind === "video" && single.durationMs != null && durationLabel(single.durationMs),
-      ].filter(Boolean)
-    : [];
+  const facts = single ? [single.fontFamily, `${single.ext.toUpperCase()} · ${formatBytes(single.size)}`].filter(Boolean) : [];
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4">
@@ -556,18 +497,6 @@ export function Inspector() {
             className="mt-3 w-full rounded-md border border-transparent bg-transparent px-1 py-0.5 text-sm font-semibold outline-none hover:border-line focus:border-accent"
           />
           <div className="px-1 text-xs text-dim tabular-nums">{facts.join(" · ")}</div>
-          {single.sourceUrl && (
-            <div className="mt-1 flex min-w-0 gap-2 px-1 text-xs">
-              <span className="shrink-0 text-dim">{single.kind === "bookmark" ? "URL" : "元のページ"}</span>
-              <button
-                className="min-w-0 truncate text-left text-accent hover:underline"
-                title={single.sourceUrl}
-                onClick={() => openUrl(single.sourceUrl!).catch((e) => useStore.getState().toast(String(e), true))}
-              >
-                {urlLabel(single.sourceUrl)}
-              </button>
-            </div>
-          )}
         </>
       ) : (
         <div className="rounded-lg bg-raised p-4 text-center">
@@ -576,7 +505,7 @@ export function Inspector() {
         </div>
       )}
 
-      {!single && selectedItems.length > 0 && selectedItems.every((i) => i.kind === "font") && (
+      {!single && selectedItems.length > 0 && (
         <Field label="書体">
           <FontCategorySelect fonts={selectedItems} />
         </Field>
@@ -651,20 +580,6 @@ export function Inspector() {
           )}
         </Section>
 
-        {/* Stock only (fonts have families); not in the trash. */}
-        {!isTrash && stock && (
-          <Section id="links" title="紐づけ" summary={linksSummary}>
-            <LinksField ids={ids} single={single} />
-          </Section>
-        )}
-
-        {/* One video, not in the trash: its own thumbnail (docs/VIDEO.md). */}
-        {!isTrash && single?.kind === "video" && (
-          <Section id="thumb" title="サムネイル" summary={single.ownThumb ? "設定した画像" : "動画のコマ"}>
-            <VideoThumbField item={single} />
-          </Section>
-        )}
-
         {single && (
           <Section id="note" title="メモ" summary={single.note.trim() ? single.note.trim().split("\n")[0] : "なし"}>
             <SavedText
@@ -684,27 +599,14 @@ export function Inspector() {
             title="ファイル情報"
             summary={new Date(single.importedAt).toLocaleDateString("ja-JP")}
             // A font's details (family, weight …) are what it is: open until the user closes them.
-            defaultOpen={single.kind === "font"}
+            defaultOpen
           >
             <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
-              <dt className="text-dim">{single.kind === "image" || single.kind === "video" ? "サイズ" : "種類"}</dt>
-              <dd className="tabular-nums">{sizeLabel(single)}</dd>
-              {single.kind !== "bookmark" && (
-                <>
-                  <dt className="text-dim">形式</dt>
-                  <dd>
-                    {single.ext.toUpperCase()} · {formatBytes(single.size)}
-                  </dd>
-                </>
-              )}
-              {single.kind === "video" && single.durationMs != null && (
-                <>
-                  <dt className="text-dim">再生時間</dt>
-                  <dd className="tabular-nums">{durationLabel(single.durationMs)}</dd>
-                </>
-              )}
-              {single.kind === "video" && <VideoCodecRows item={single} />}
-              {single.kind === "font" && <FontDetails item={single} />}
+              <dt className="text-dim">形式</dt>
+              <dd>
+                {single.ext.toUpperCase()} · {formatBytes(single.size)}
+              </dd>
+              <FontDetails item={single} />
               <dt className="text-dim">追加日</dt>
               <dd>{new Date(single.importedAt).toLocaleString("ja-JP")}</dd>
             </dl>

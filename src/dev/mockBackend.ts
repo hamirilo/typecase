@@ -2,34 +2,15 @@
 // opened in a normal browser (`bun run dev`) instead of inside Tauri.
 // Mirrors the semantics of src-tauri/src/db.rs closely enough for UI work.
 import { mockIPC, mockWindows } from "@tauri-apps/api/mocks";
-import { modeOf, type Folder, type Item, type ItemKind, type ItemQuery, type KindCounts, type Mode, type Rule, type SimilarLevel, type Tag } from "../lib/api";
+import { FONT_EXTS, type Folder, type Item, type ItemQuery, type Rule, type Tag } from "../lib/api";
 import type { SystemFont } from "../features/fonts/api";
-import { buildHas } from "../lib/limits";
-
-/** The file types of each kind (src-tauri/src/formats.rs `SUPPORTED_EXTS`). */
-const KIND_EXTS: [ItemKind, string[]][] = [
-  ["image", ["jpg", "jpeg", "png", "gif", "webp", "bmp", "tif", "tiff", "svg", "heic", "heif", "avif"]],
-  ["font", ["ttf", "otf", "woff", "woff2", "ttc", "otc"]],
-  ["file", ["pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "pages", "numbers", "key"]],
-  ["text", ["md", "markdown", "txt", "csv", "tsv"]],
-  ["video", ["mp4", "m4v", "mov", "webm"]],
-];
-
-/** Commands a build with fewer features refuses (src-tauri/src/limits.rs). */
-const LEFT_OUT = new Set([
-  ...(buildHas("text") ? [] : ["create_text"]),
-  ...(buildHas("bookmark") ? [] : ["create_bookmark"]),
-]);
 
 type MockItem = Omit<
   Item,
   | "filePath"
   | "thumbPath"
-  | "displayPath"
-  | "preview"
   | "folderId"
   | "tagIds"
-  | "sourceUrl"
   | "fontFamily"
   | "fontWeight"
   | "fontScript"
@@ -37,19 +18,8 @@ type MockItem = Omit<
   | "fontCategoryUser"
   | "fontFeatures"
   | "fontPsName"
-  | "durationMs"
   | "inTray"
-  | "parentId"
-  | "adopted"
-  | "ownThumb"
 > & {
-  hue: number;
-  /** A video's own thumbnail (a data URL), set from another item or a stand-in (videos/thumb.rs). */
-  customThumb?: string;
-  /** The parent of a linked child (docs/LINKS.md). */
-  parentId?: string | null;
-  adopted?: boolean;
-  sourceUrl?: string;
   fontFamily?: string;
   fontWeight?: number;
   /** The wght axis of a variable font; else the one weight. */
@@ -60,17 +30,13 @@ type MockItem = Omit<
   fontCategoryUser?: string | null;
   fontFeatures?: string[];
   fontPsName?: string;
-  /** Videos: the length in milliseconds. */
-  durationMs?: number;
-  /** Texts: the file's content (src-tauri/src/texts). */
-  body?: string;
 };
 
 const items: MockItem[] = [];
 
 /**
  * The fonts "installed on this computer" (src-tauri/src/fonts/system.rs): the
- * font mode's この端末のフォント, read only (docs/SYSTEM_FONTS.md).
+ * この端末のフォント, read only (docs/SYSTEM_FONTS.md).
  */
 const systemFonts: SystemFont[] = (
   [
@@ -110,7 +76,6 @@ const fontItem = (fid: string): MockItem => {
   return {
     ...({} as MockItem),
     id: f.id,
-    kind: "font",
     name: f.name,
     ext: f.ext,
     fontFamily: f.family,
@@ -119,7 +84,7 @@ const fontItem = (fid: string): MockItem => {
   };
 };
 
-/** Weight ranges of the sidebar's 太さ, as in db.rs `FONT_WEIGHTS`. */
+/** Weight ranges of the 太さ, as in db.rs `FONT_WEIGHTS`. */
 const FONT_WEIGHT_RANGES: [string, number, number][] = [
   ["light", 1, 399],
   ["regular", 400, 549],
@@ -132,14 +97,8 @@ const inWeight = (i: MockItem, key: string) => {
   const [lo, hi] = [i.fontWeightMin ?? i.fontWeight ?? 400, i.fontWeightMax ?? i.fontWeight ?? 400];
   return lo <= r[2] && hi >= r[1];
 };
-const folders: Omit<Folder, "count" | "byKind">[] = [];
-/** Items by kind (kinds with none left out), as the backend counts them for the sidebar. */
-const byKind = (list: { kind: ItemKind }[]): KindCounts => {
-  const out: KindCounts = {};
-  for (const i of list) out[i.kind] = (out[i.kind] ?? 0) + 1;
-  return out;
-};
-const tags: { id: number; name: string; color: string | null; mode: Mode }[] = [];
+const folders: Omit<Folder, "count">[] = [];
+const tags: { id: number; name: string; color: string | null }[] = [];
 // `${itemId}|${folderId}` -> manual position
 const itemFolders = new Map<string, number>();
 let posSeq = 0;
@@ -155,8 +114,7 @@ const tray = new Map<string, number>();
 // Installed fonts on the shelf (their ids are in `tray` too, for the one order): id -> name.
 const systemTrayNames = new Map<string, string>();
 let traySeq = 0;
-const smartFolders: { id: string; name: string; rule: Rule; color: string | null; mode: Mode }[] = [];
-const EXTS = ["jpg", "png", "jpg", "webp", "jpg", "heic"];
+const smartFolders: { id: string; name: string; rule: Rule; color: string | null }[] = [];
 let tagSeq = 0;
 let uid = 0;
 const id = () => `m${(++uid).toString(36)}`;
@@ -165,39 +123,7 @@ function seed() {
   // An installed font put on the shelf on another computer, which this one doesn't have.
   tray.set("sys:elsewhere", ++traySeq);
   systemTrayNames.set("sys:elsewhere", "游明朝体 Pr6N R");
-  const sizes = [
-    [800, 600],
-    [600, 800],
-    [1200, 500],
-    [700, 700],
-  ];
-  for (let i = 0; i < 120; i++) {
-    const [width, height] = sizes[i % 4];
-    const ext = EXTS[i % EXTS.length];
-    items.push({
-      id: id(),
-      kind: "image",
-      name: `sample-${String(i).padStart(3, "0")}.${ext}`,
-      fileName: `sample-${i}.${ext}`,
-      ext,
-      width: width * (1 + (i % 3)),
-      height: height * (1 + (i % 3)),
-      size: 40_000 + i * 997 * (i % 9) * 30,
-      thumb: "",
-      note: "",
-      rating: i % 7 === 0 ? 3 : i % 11 === 0 ? 5 : i % 5 === 0 ? 1 : 0,
-      importedAt: Date.now() - (120 - i) * 60_000,
-      deletedAt: null,
-      favorite: i % 13 === 0,
-      pinnedAt: i === 8 ? Date.now() - 1000 : i === 21 ? Date.now() : null,
-      rotation: 0,
-      flipped: false,
-      hue: (i * 47) % 360,
-      ...(i % 6 === 1 ? { sourceUrl: `https://www.example.com/gallery/${i}?ref=web` } : {}),
-    });
-  }
-  // Fonts: no pixel size, a sample as the thumbnail. Noto Sans JP comes as
-  // one file per weight (grouped by family), Inter as one variable font.
+  // Noto Sans JP comes as one file per weight (grouped by family), Inter as one variable font.
   const fontFiles: [string, string, number, string, string | null, string[], [number, number]?][] = [
     ["NotoSansJP-Bold.ttf", "Noto Sans JP", 700, "ja", "gothic", []],
     ["NotoSansJP-Regular.ttf", "Noto Sans JP", 400, "ja", "gothic", []],
@@ -205,9 +131,17 @@ function seed() {
     ["Hiragino.ttc", "ヒラギノ角ゴシック", 300, "ja", "gothic", []],
     ["NotoSansJP-Light.ttf", "Noto Sans JP", 300, "ja", "gothic", []],
     ["NotoSerifJP-Regular.otf", "Noto Serif JP", 400, "ja", "mincho", []],
+    ["NotoSerifJP-Bold.otf", "Noto Serif JP", 700, "ja", "mincho", []],
     ["Garamond-Italic.otf", "EB Garamond", 400, "latin", "mincho", ["italic"]],
+    ["Garamond-Regular.otf", "EB Garamond", 400, "latin", "mincho", []],
     ["JetBrainsMono-Regular.ttf", "JetBrains Mono", 400, "latin", "gothic", ["mono", "coding"]],
+    ["RobotoSlab-Regular.ttf", "Roboto Slab", 400, "latin", "slab", []],
+    ["MPLUSRounded1c-Regular.ttf", "M PLUS Rounded 1c", 400, "ja", "maru", []],
     ["keifont.ttf", "けいふぉんと", 400, "ja", "hand", []],
+    ["Yuji-Syuku.ttf", "Yuji Syuku", 400, "ja", "brush", []],
+    ["Lobster-Regular.ttf", "Lobster", 400, "latin", "display", []],
+    ["NotoSansKR-Regular.otf", "Noto Sans KR", 400, "ko", "gothic", []],
+    ["NotoSansSC-Regular.otf", "Noto Sans SC", 400, "zh", "gothic", []],
   ];
   for (const [i, [file, fontFamily, fontWeight, fontScript, fontCategory, fontFeatures, range]] of fontFiles.entries()) {
     items.push({
@@ -221,335 +155,44 @@ function seed() {
       // The file's name for most; the Hiragino and Noto Sans JP Regular are installed too (`systemFonts`).
       fontPsName: file === "Hiragino.ttc" ? "HiraginoSans-W3" : file.replace(/\.[^.]+$/, ""),
       id: id(),
-      kind: "font",
       name: file,
       fileName: file,
       ext: file.split(".").pop()!,
-      width: 0,
-      height: 0,
       size: 300_000 * (i + 1),
       thumb: "",
       note: "",
-      rating: 0,
-      importedAt: Date.now() - 30_000 + i,
+      rating: i % 5 === 0 ? 4 : i % 7 === 0 ? 2 : 0,
+      importedAt: Date.now() - (fontFiles.length - i) * 3_600_000,
       deletedAt: null,
-      favorite: false,
-      pinnedAt: null,
-      rotation: 0,
-      flipped: false,
-      hue: 0,
+      favorite: i % 6 === 0,
+      pinnedAt: i === 3 ? Date.now() : null,
     });
   }
-  // Files: PDF and office documents, 0 × 0 like fonts.
-  const docFiles = ["企画書.pdf", "議事録 2026-10.docx", "売上集計.xlsx", "提案資料.pptx", "カタログ.pdf", "メモ.pages", "発表.key", "旧仕様書.doc"];
-  for (const [i, file] of docFiles.entries()) {
-    items.push({
-      id: id(),
-      kind: "file",
-      name: file,
-      fileName: file,
-      ext: file.split(".").pop()!,
-      width: 0,
-      height: 0,
-      size: 180_000 * (i + 2),
-      thumb: "",
-      note: "",
-      rating: i === 0 ? 4 : 0,
-      importedAt: Date.now() - 20_000 + i,
-      deletedAt: null,
-      favorite: i === 1,
-      pinnedAt: null,
-      rotation: 0,
-      flipped: false,
-      hue: (i * 67) % 360,
-    });
-  }
-  // Videos (docs/VIDEO.md): they can't play here (no real file), so the viewer shows its fallback.
-  for (const [i, [file, w, h, sec]] of ([
-    ["店頭の様子.mp4", 1920, 1080, 187],
-    ["商品紹介.mov", 1280, 720, 62],
-    ["縦型ショート.mp4", 1080, 1920, 15],
-    ["会議の録画.webm", 1920, 1080, 3725],
-  ] as const).entries()) {
-    items.push({
-      id: id(),
-      kind: "video",
-      name: file,
-      fileName: file,
-      ext: file.split(".").pop()!,
-      width: w,
-      height: h,
-      size: sec * 900_000,
-      durationMs: sec * 1000,
-      thumb: "",
-      note: "",
-      rating: 0,
-      importedAt: Date.now() - 15_000 + i,
-      deletedAt: null,
-      favorite: false,
-      pinnedAt: null,
-      rotation: 0,
-      flipped: false,
-      hue: (i * 83 + 200) % 360,
-    });
-  }
-  // Bookmarks (docs/BOOKMARKS.md): a URL with the page's title; the description is the memo.
-  for (const [i, [title, url, note]] of ([
-    ["Tauri 2.0 ドキュメント", "https://v2.tauri.app/", "クロスプラットフォームのデスクトップアプリを作るためのフレームワーク"],
-    ["食肉の相場情報", "https://www.example.com/market/beef", ""],
-    ["example.com", "https://example.com/", ""],
-  ] as const).entries()) {
-    items.push({
-      id: id(),
-      kind: "bookmark",
-      name: title,
-      fileName: `${title}.url`,
-      ext: "url",
-      width: 0,
-      height: 0,
-      size: 60,
-      thumb: "",
-      note,
-      rating: 0,
-      importedAt: Date.now() - 5_000 + i,
-      deletedAt: null,
-      favorite: false,
-      pinnedAt: null,
-      rotation: 0,
-      flipped: false,
-      hue: (i * 97 + 20) % 360,
-      sourceUrl: url,
-    });
-  }
-  // Texts: Markdown, plain text, CSV (docs/TEXT.md), 0 × 0 like files.
-  const texts: [string, string][] = [
-    [
-      "週次ミーティング.md",
-      "# 週次ミーティング\n\n2026-10-16（金）\n\n## 議題\n\n- 牛肉の在庫を確認する\n- [x] 価格表を更新\n- [ ] **新商品**の企画を出す\n\n> 次回までに数字をそろえる\n\n| 部位 | 在庫 | 前週比 |\n|---|--:|--:|\n| ロース | 120 | +8 |\n| バラ | 95 | -3 |\n\n```sql\nSELECT * FROM stock WHERE qty < 10;\n```\n\n詳しくは [社内ポータル](https://example.com) を参照。<script>alert(1)</script>\n",
-    ],
-    ["仕入れ一覧.csv", '品名,部位,数量,単価\n和牛,ロース,12,4800\n国産豚,バラ,30,980\n"鶏,もも",もも,45,620\n輸入牛,肩ロース,8,1980\n'],
-    ["電話メモ.txt", "10/15 14:20 ○○商事 田中様\n見積もりの件で折り返し希望\n03-xxxx-xxxx\n"],
-  ];
-  for (const [i, [file, body]] of texts.entries()) {
-    items.push({
-      id: id(),
-      kind: "text",
-      name: file,
-      fileName: file,
-      ext: file.split(".").pop()!,
-      width: 0,
-      height: 0,
-      size: new TextEncoder().encode(body).length,
-      thumb: "",
-      note: "",
-      rating: 0,
-      importedAt: Date.now() - 10_000 + i,
-      deletedAt: null,
-      favorite: false,
-      pinnedAt: null,
-      rotation: 0,
-      flipped: false,
-      hue: 0,
-      body,
-    });
-  }
-  const animals = { id: id(), parentId: null, name: "動物", color: "orange", mode: "stock" as const };
+  const ja = { id: id(), parentId: null, name: "和文", color: "purple" };
   folders.push(
-    animals,
-    { id: id(), parentId: animals.id, name: "ねこ", color: null, mode: "stock" },
-    { id: id(), parentId: null, name: "風景", color: "green", mode: "stock" },
-    { id: id(), parentId: null, name: "和文", color: "purple", mode: "font" },
+    ja,
+    { id: id(), parentId: ja.id, name: "本文", color: null },
+    { id: id(), parentId: null, name: "欧文", color: "teal" },
   );
-  items.slice(0, 30).forEach((it) => link(it.id, animals.id));
-  items.slice(30, 36).forEach((it) => link(it.id, folders[1].id));
-  // Linked files (docs/LINKS.md), so the 紐づけ UI can be tried in the browser mock.
-  librarySettings.links = true;
-  for (const [p, n] of [[0, 3], [5, 2], [10, 4], [18, 1]] as const) {
-    items.slice(p + 1, p + 1 + n).forEach((c) => (c.parentId = items[p].id));
-  }
-  addTags(items.slice(0, 40).map((i) => i.id), ["参考"]);
-  addTags(items.slice(20, 60).map((i) => i.id), ["ブルー", "背景"]);
-  // Fonts have folders and tags of their own (docs/MODES.md); "参考" is both modes'.
-  const fonts = items.filter((i) => i.kind === "font");
-  fonts.filter((i) => i.fontScript === "ja").forEach((it) => link(it.id, folders[3].id));
-  addTags(fonts.slice(0, 3).map((i) => i.id), ["本文", "参考"]);
-  // Look-alikes for the similar view: smaller re-saves of a few images.
-  for (const [src, n] of [[3, 1], [10, 2], [57, 1]] as const) {
-    const orig = items[src];
-    for (let k = 1; k <= n; k++) {
-      items.push({
-        ...orig,
-        id: id(),
-        name: orig.name.replace(/\.(\w+)$/, k > 1 ? ` (コピー ${k}).$1` : " (コピー).$1"),
-        width: Math.round(orig.width / (k + 1)),
-        height: Math.round(orig.height / (k + 1)),
-        size: Math.round(orig.size / (k + 1)),
-        rating: 0,
-        favorite: false,
-        pinnedAt: null,
-        importedAt: orig.importedAt + k * 1000,
-      });
-    }
-  }
+  items.filter((i) => i.fontScript === "ja").forEach((it) => link(it.id, ja.id));
+  items.filter((i) => i.fontFamily?.startsWith("Noto Sans JP")).forEach((it) => link(it.id, folders[1].id));
+  items.filter((i) => i.fontScript === "latin").forEach((it) => link(it.id, folders[2].id));
+  addTags(items.slice(0, 4).map((i) => i.id), ["本文", "候補"]);
+  addTags(items.slice(6, 10).map((i) => i.id), ["見出し"]);
 }
 
-/** Pairs dismissed as "not duplicates": "a|b" (a < b) -> batch number (one per dismiss action). */
-const dismissed = new Map<string, number>();
-let dismissSeq = 0;
-const pairKey = (x: string, y: string) => (x < y ? `${x}|${y}` : `${y}|${x}`);
-const pairsOf = (ids: string[]) => ids.flatMap((x, k) => ids.slice(k + 1).map((y) => pairKey(x, y)));
-
-/** Mock stand-in for the perceptual hash: same colours and shape = look-alike. */
-function similar(r: MockItem[], level: SimilarLevel): MockItem[] {
-  const key = (i: MockItem) =>
-    level === "loose"
-      ? `${Math.round(i.hue / 20)}|${(i.width / i.height).toFixed(1)}`
-      : `${i.hue}|${(i.width / i.height).toFixed(2)}`;
-  const groups = new Map<string, MockItem[]>();
-  r.forEach((i) => groups.set(key(i), [...(groups.get(key(i)) ?? []), i]));
-  return [...groups.values()]
-    .map((g) =>
-      [...g].sort((a, b) => b.width * b.height - a.width * a.height || b.size - a.size),
-    )
-    // Strict: only copies that are barely smaller than the best one.
-    .map((g) => (level === "strict" ? g.filter((i) => i.width >= g[0].width / 2.2) : g))
-    .filter((g) => g.length > 1)
-    // Simplified: a group disappears once every pair in it was dismissed.
-    .filter((g) => !pairsOf(g.map((i) => i.id)).every((p) => dismissed.has(p)))
-    .flatMap((g, n) =>
-      g.map((i) => ({ ...i, group: n, distance: Math.round(Math.log2(g[0].width / i.width) * 4) })),
-    );
-}
-
-/** Font thumbnail: "Aa" and a line of sample text, like fonts.rs renders it. */
+/** Font thumbnail: "Aa" and a line of sample text, like fonts/mod.rs renders it. */
 function fontSvg(it: MockItem) {
   const weight = it.fontWeight ?? 400;
   const s = `<svg xmlns="http://www.w3.org/2000/svg" width="512" height="384"><rect width="100%" height="100%" fill="#f4f4f5"/><g font-family="sans-serif" font-weight="${weight}" fill="#18181b" text-anchor="middle"><text x="256" y="215" font-size="170">Aa</text><text x="256" y="320" font-size="52">${it.fontScript === "ja" ? "あア永" : "ABC abc 123"}</text></g></svg>`;
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(s)}`;
 }
 
-/** File thumbnail: a page (PDF / Word / Pages), a slide or a sheet, roughly what Quick Look gives. */
-function fileSvg(it: MockItem) {
-  const wide = ["ppt", "pptx", "key"].includes(it.ext);
-  const [w, h] = wide ? [512, 288] : [362, 512];
-  const lines = Array.from({ length: wide ? 3 : 14 }, (_, k) => {
-    const y = (wide ? 150 : 110) + k * (wide ? 30 : 26);
-    return `<rect x="${wide ? 60 : 40}" y="${y}" width="${(wide ? 300 : 280) - ((k * 37) % 90)}" height="${wide ? 12 : 8}" rx="3" fill="#c4c4cc"/>`;
-  }).join("");
-  const head = `<rect x="${wide ? 60 : 40}" y="${wide ? 70 : 50}" width="${wide ? 320 : 200}" height="${wide ? 40 : 22}" rx="4" fill="hsl(${it.hue},55%,45%)"/>`;
-  const s = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><rect width="100%" height="100%" fill="#ffffff"/>${head}${lines}</svg>`;
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(s)}`;
-}
-
-/** A video's thumbnail: a frame (a gradient here) with the play mark. */
-function videoSvg(it: MockItem) {
-  const [w, h] = [it.width, it.height].map((v) => Math.round(v / 3));
-  const s = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="hsl(${it.hue},45%,25%)"/><stop offset="1" stop-color="hsl(${(it.hue + 50) % 360},55%,50%)"/></linearGradient></defs><rect width="100%" height="100%" fill="url(#g)"/><path d="M${w / 2 - h / 12} ${h / 2 - h / 9} L${w / 2 + h / 8} ${h / 2} L${w / 2 - h / 12} ${h / 2 + h / 9} Z" fill="white" fill-opacity="0.85"/></svg>`;
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(s)}`;
-}
-
-/** A bookmark's card: the title and the host (bookmarks/mod.rs draws the real one). */
-function bookmarkSvg(it: MockItem) {
-  const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  const host = (it.sourceUrl ?? "").replace(/^https?:\/\/(www\.)?/, "").split("/")[0];
-  const s = `<svg xmlns="http://www.w3.org/2000/svg" width="384" height="384"><rect width="100%" height="100%" fill="#f6f7f9"/><circle cx="48" cy="48" r="20" fill="hsl(${it.hue},55%,50%)"/><text x="28" y="158" font-family="sans-serif" font-size="22" font-weight="600" fill="#1f2328">${esc(it.name.slice(0, 18))}</text><text x="28" y="356" font-family="sans-serif" font-size="16" fill="#6b7280">${esc(host)}</text></svg>`;
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(s)}`;
-}
-
-/** A text's thumbnail: its first lines on a page with the type (texts/mod.rs draws the real one). */
-function textSvg(it: MockItem) {
-  const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  const lines = (it.body ?? "").split("\n").slice(0, 16);
-  const rows = lines
-    .map((l, k) => `<text x="26" y="${48 + k * 26}" font-family="sans-serif" font-size="17" fill="#333">${esc(l.slice(0, 22))}</text>`)
-    .join("");
-  const label = it.ext === "csv" ? "CSV" : it.ext === "tsv" ? "TSV" : it.ext === "txt" ? "TXT" : "MD";
-  const color = label === "MD" ? "#2563eb" : label === "TXT" ? "#6b7280" : "#16a34a";
-  const s = `<svg xmlns="http://www.w3.org/2000/svg" width="384" height="512"><rect width="100%" height="100%" fill="#fff"/>${rows}<rect x="300" y="470" width="58" height="26" rx="5" fill="${color}"/><text x="329" y="488" font-family="sans-serif" font-size="14" font-weight="bold" fill="#fff" text-anchor="middle">${label}</text></svg>`;
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(s)}`;
-}
-
-/** A one-page PDF with the item's name, for the viewer's PDF frame. */
-function pdfData(it: MockItem) {
-  const text = `BT /F1 28 Tf 72 760 Td (${it.name.replace(/[^\x20-\x7e]/g, "?")}) Tj ET`;
-  const objs = [
-    "<< /Type /Catalog /Pages 2 0 R >>",
-    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
-    `<< /Length ${text.length} >>\nstream\n${text}\nendstream`,
-    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-  ];
-  let out = "%PDF-1.4\n";
-  const offsets: number[] = [];
-  objs.forEach((o, k) => {
-    offsets.push(out.length);
-    out += `${k + 1} 0 obj\n${o}\nendobj\n`;
-  });
-  const xref = out.length;
-  out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n`;
-  out += offsets.map((o) => `${String(o).padStart(10, "0")} 00000 n \n`).join("");
-  out += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
-  return `data:application/pdf;base64,${btoa(out)}`;
-}
-
-/** The "file" (unrotated), or with `oriented` the thumbnail showing the item's rotation / flip. */
-function svg(it: MockItem, scale: number, oriented = false) {
-  const sideways = it.rotation % 2 === 1;
-  const ow = Math.round((sideways ? it.height : it.width) / scale);
-  const oh = Math.round((sideways ? it.width : it.height) / scale);
-  const body = `<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="hsl(${it.hue},60%,35%)"/><stop offset="1" stop-color="hsl(${(it.hue + 60) % 360},70%,60%)"/></linearGradient></defs><rect width="${ow}" height="${oh}" fill="url(#g)"/><text x="${ow / 2}" y="${oh / 2}" font-family="sans-serif" font-size="${ow / 10}" fill="white" text-anchor="middle" dominant-baseline="middle">${it.name}</text>`;
-  const [w, h] = oriented && sideways ? [oh, ow] : [ow, oh];
-  // Flip first, then rotate (as in orient.rs); SVG applies the list right to left.
-  const t = `translate(${w / 2} ${h / 2}) rotate(${oriented ? it.rotation * 90 : 0}) scale(${oriented && it.flipped ? -1 : 1} 1) translate(${-ow / 2} ${-oh / 2})`;
-  const s = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><g transform="${t}">${body}</g></svg>`;
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(s)}`;
-}
-
-/** The mock image drawn to PNG data, as the real command hands it out. */
-async function sheetImage(it: MockItem, maxSide: number): Promise<ArrayBuffer> {
-  const img = new Image();
-  img.src = it.kind === "font" ? fontSvg(it) : it.kind === "file" ? fileSvg(it) : it.kind === "text" ? textSvg(it) : it.kind === "video" ? videoSvg(it) : it.kind === "bookmark" ? bookmarkSvg(it) : svg(it, 1, true);
-  await img.decode();
-  const scale = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
-  canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
-  canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
-  const blob = await new Promise<Blob>((ok) => canvas.toBlob((b) => ok(b!), "image/png"));
-  return blob.arrayBuffer();
-}
-
 const view = (it: MockItem): Item => {
-  const filePath =
-    it.kind === "file"
-      ? it.ext === "pdf"
-        ? pdfData(it)
-        : fileSvg(it)
-      : it.kind === "text"
-        ? textSvg(it)
-        : it.kind === "video"
-          ? "data:video/mp4;base64,"
-          : it.kind === "bookmark"
-            ? bookmarkSvg(it)
-            : svg(it, 1);
   const folderId = folders.find((f) => inFolder(it.id, f.id))?.id ?? null;
   const tagIds = tags.filter((t) => hasTag(it.id, t.id)).map((t) => t.id);
-  const thumbPath =
-    it.customThumb ??
-    (it.kind === "font"
-      ? fontSvg(it)
-      : it.kind === "file"
-        ? fileSvg(it)
-        : it.kind === "text"
-          ? textSvg(it)
-          : it.kind === "video"
-            ? videoSvg(it)
-            : it.kind === "bookmark"
-              ? bookmarkSvg(it)
-              : svg(it, 3, true));
   return {
     ...it,
-    sourceUrl: it.sourceUrl ?? null,
     fontFamily: it.fontFamily ?? null,
     fontWeight: it.fontWeight ?? null,
     fontScript: it.fontScript ?? null,
@@ -557,37 +200,25 @@ const view = (it: MockItem): Item => {
     fontCategoryUser: it.fontCategoryUser ?? null,
     fontFeatures: it.fontFeatures ?? [],
     fontPsName: it.fontPsName ?? null,
-    durationMs: it.durationMs ?? null,
     inTray: tray.has(it.id),
-    parentId: it.parentId ?? null,
-    adopted: it.adopted ?? false,
-    preview: null,
     folderId,
     tagIds,
-    filePath,
-    displayPath: filePath,
-    thumbPath,
-    ownThumb: !!it.customThumb,
+    filePath: `/mock/fonts/${it.id}/${it.fileName}`,
+    thumbPath: fontSvg(it),
   };
 };
 const inFolder = (i: string, f: string) => itemFolders.has(`${i}|${f}`);
 const hasTag = (i: string, t: number) => itemTags.has(`${i}|${t}`);
 const live = () => items.filter((i) => i.deletedAt === null);
 
-/** The mode of item `i` (as db.rs `Mode::of`). */
-const modeOfItem = (i: string): Mode => modeOf(items.find((x) => x.id === i)?.kind ?? "image");
-
-/** Each item gets the tag of its own mode, as db.rs `add_tags`. */
+/** Tags items by name, made where missing (db.rs `add_tags`). */
 function addTags(ids: string[], names: string[]) {
   for (const raw of names) {
     const name = raw.trim();
     if (!name) continue;
-    for (const i of ids) {
-      const mode = modeOfItem(i);
-      let t = tags.find((x) => x.mode === mode && x.name.toLowerCase() === name.toLowerCase());
-      if (!t) tags.push((t = { id: ++tagSeq, name, color: name === "参考" ? "blue" : null, mode }));
-      itemTags.add(`${i}|${t.id}`);
-    }
+    let t = tags.find((x) => x.name.toLowerCase() === name.toLowerCase());
+    if (!t) tags.push((t = { id: ++tagSeq, name, color: name === "候補" ? "blue" : null }));
+    for (const i of ids) itemTags.add(`${i}|${t.id}`);
   }
 }
 
@@ -595,8 +226,7 @@ function descendants(fid: string): string[] {
   return [fid, ...folders.filter((f) => f.parentId === fid).flatMap((f) => descendants(f.id))];
 }
 
-const aliases = (e: string) =>
-  ({ jpeg: "jpg", tiff: "tif", heif: "heic" })[e.toLowerCase()] ?? e.toLowerCase();
+const ext = (e: string) => e.toLowerCase();
 
 // Simplified search (AND + "-exclude"); the real parser lives in src-tauri/src/search.rs.
 function applyRule(r: MockItem[], rule: Rule): MockItem[] {
@@ -607,7 +237,6 @@ function applyRule(r: MockItem[], rule: Rule): MockItem[] {
       i.name.toLowerCase().includes(w) ||
       i.note.toLowerCase().includes(w) ||
       (i.fontFamily ?? "").toLowerCase().includes(w) ||
-      (i.body ?? "").toLowerCase().includes(w) ||
       tags.some((t) => hasTag(i.id, t.id) && t.name.toLowerCase().includes(w));
     r = r.filter((i) => hit(i) !== neg);
   }
@@ -619,45 +248,16 @@ function applyRule(r: MockItem[], rule: Rule): MockItem[] {
   if (rule.minRating) r = r.filter((i) => i.rating >= rule.minRating);
   const f = rule.filter;
   if (!f) return r;
-  if (f.kinds?.length) r = r.filter((i) => f.kinds.includes(i.kind));
-  if (f.fontScripts?.length) r = r.filter((i) => i.kind === "font" && f.fontScripts.includes(i.fontScript ?? ""));
+  if (f.fontScripts?.length) r = r.filter((i) => f.fontScripts.includes(i.fontScript ?? ""));
   if (f.fontCategories?.length)
-    r = r.filter(
-      (i) => i.kind === "font" && f.fontCategories.includes(i.fontCategoryUser ?? i.fontCategory ?? "none"),
-    );
-  if (f.fontWeights?.length) r = r.filter((i) => i.kind === "font" && f.fontWeights.some((k) => inWeight(i, k)));
-  if (f.fontFeatures?.length)
-    r = r.filter((i) => i.kind === "font" && f.fontFeatures.some((k) => (i.fontFeatures ?? []).includes(k)));
-  if (f.exts.length) r = r.filter((i) => f.exts.map(aliases).includes(aliases(i.ext)));
-  // Shape and pixel size apply to images and videos (the rest are 0 × 0), as in db.rs.
-  const sized = f.shapes.length || [f.minWidth, f.maxWidth, f.minHeight, f.maxHeight].some((v) => v != null);
-  if (sized) r = r.filter((i) => i.kind === "image" || i.kind === "video");
-  // The live children of live parents stay, to go under their rows.
-  if (f.parentsOnly)
-    r = r.filter(
-      (i) =>
-        hasChildren(i) ||
-        (i.deletedAt === null && items.some((p) => p.id === i.parentId && p.deletedAt === null)),
-    );
-  if (f.childrenOnly) r = r.filter((i) => !!i.parentId);
-  if (f.unlinkedOnly) r = r.filter((i) => !i.parentId && !hasChildren(i));
-  if (f.shapes.length) {
-    r = r.filter((i) =>
-      f.shapes.some((s) =>
-        s === "landscape"
-          ? i.width > i.height * 1.05
-          : s === "portrait"
-            ? i.height > i.width * 1.05
-            : i.width <= i.height * 1.05 && i.height <= i.width * 1.05,
-      ),
-    );
-  }
+    r = r.filter((i) => f.fontCategories.includes(i.fontCategoryUser ?? i.fontCategory ?? "none"));
+  if (f.fontWeights?.length) r = r.filter((i) => f.fontWeights.some((k) => inWeight(i, k)));
+  if (f.fontFeatures?.length) r = r.filter((i) => f.fontFeatures.some((k) => (i.fontFeatures ?? []).includes(k)));
+  if (f.exts?.length) r = r.filter((i) => f.exts.map(ext).includes(ext(i.ext)));
   const within = (v: number, min: number | null, max: number | null) =>
     (min == null || v >= min) && (max == null || v <= max);
   return r.filter(
     (i) =>
-      within(i.width, f.minWidth, f.maxWidth) &&
-      within(i.height, f.minHeight, f.maxHeight) &&
       within(i.size, f.minSize, f.maxSize) &&
       (f.importedAfter == null || i.importedAt >= f.importedAfter) &&
       (f.importedBefore == null || i.importedAt < f.importedBefore),
@@ -676,9 +276,9 @@ function placeFolder(fid: string, parent: string | null, before: string | null):
   return true;
 }
 
-/** Rewrites the order of `parent`'s children of `mode` (array order = sibling order). */
-function reorderSiblings(parent: string | null, mode: Mode, order: (sibs: typeof folders) => typeof folders) {
-  const slots = folders.map((f, i) => (f.parentId === parent && f.mode === mode ? i : -1)).filter((i) => i >= 0);
+/** Rewrites the order of `parent`'s children (array order = sibling order). */
+function reorderSiblings(parent: string | null, order: (sibs: typeof folders) => typeof folders) {
+  const slots = folders.map((f, i) => (f.parentId === parent ? i : -1)).filter((i) => i >= 0);
   const next = order(slots.map((i) => folders[i]));
   slots.forEach((slot, k) => (folders[slot] = next[k]));
 }
@@ -705,24 +305,16 @@ function matched(q: ItemQuery): MockItem[] {
   return r;
 }
 
-/** A parent: a child of it is where it is (both live, or both in the trash; db.rs `HAS_CHILDREN`). */
-const hasChildren = (p: MockItem) => items.some((c) => c.parentId === p.id && (c.deletedAt === null) === (p.deletedAt === null));
+function countBy<T>(xs: T[], key: (x: T) => string): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const x of xs) out[key(x)] = (out[key(x)] ?? 0) + 1;
+  return out;
+}
 
-/** Counts per value of each filter condition, as db.rs `facet_counts`. */
-function facets(q: ItemQuery) {
-  const r = matched(q);
-  const fonts = r.filter((i) => i.kind === "font" && i.fontScript);
-  const exts = countBy(r, (i) => aliases(i.ext));
-  const shape = (i: MockItem) =>
-    i.width > i.height * 1.05 ? "landscape" : i.height > i.width * 1.05 ? "portrait" : "square";
+/** Counts by writing system, style, weight range and feature, of fonts whose details were read. */
+function fontCounts(list: MockItem[]) {
+  const fonts = list.filter((i) => i.fontScript);
   return {
-    ratings: countBy(r, (i) => String(i.rating)),
-    tags: Object.fromEntries(
-      tags.map((t) => [t.id, r.filter((i) => hasTag(i.id, t.id)).length]).filter(([, n]) => n),
-    ),
-    kinds: countBy(r, (i) => i.kind),
-    exts: Object.entries(exts).sort((x, y) => y[1] - x[1]),
-    shapes: countBy(r.filter((i) => i.kind === "image" || i.kind === "video"), shape),
     fontScripts: countBy(fonts, (i) => i.fontScript ?? "other"),
     fontCategories: countBy(fonts, (i) => i.fontCategoryUser ?? i.fontCategory ?? "none"),
     fontWeights: Object.fromEntries(
@@ -732,66 +324,29 @@ function facets(q: ItemQuery) {
       fonts.flatMap((i) => (i.fontFeatures ?? []).map((k) => ({ k }))),
       (x) => x.k,
     ),
-    parents: r.filter(hasChildren).length,
-    children: r.filter((i) => !!i.parentId).length,
-    unlinked: r.filter((i) => !i.parentId && !hasChildren(i)).length,
   };
 }
 
-/** With links on, a matching child brings its parent into the list, `viaChild` (db.rs `add_parents`). */
-function withParentsOf(list: Item[], q: ItemQuery): Item[] {
-  if (!q.withParents || librarySettings.links !== true || ["trash", "tray", "similar"].includes(q.view.kind)) return list;
-  const present = new Set(list.map((i) => i.id));
-  const added = new Set<string>();
-  const out: Item[] = [];
-  for (const it of list) {
-    const p = it.parentId && !present.has(it.parentId) && !added.has(it.parentId)
-      ? items.find((x) => x.id === it.parentId && x.deletedAt === null)
-      : undefined;
-    if (p) {
-      added.add(p.id);
-      out.push({ ...view(p), viaChild: true });
-    }
-    out.push(it);
-  }
-  return out;
-}
-
-/** `ids` as a folder change treats them: a child moves only with its parent, a parent takes its children (db.rs `with_linked`). */
-function withLinked(ids: string[]): string[] {
-  const out: string[] = [];
-  for (const id of ids) {
-    const it = items.find((x) => x.id === id);
-    if (!it || (it.parentId && !ids.includes(it.parentId))) continue;
-    if (!out.includes(id)) out.push(id);
-    for (const c of items) if (c.parentId === id && !out.includes(c.id)) out.push(c.id);
-  }
-  return out;
-}
-
-/** Where a child stands, for the undo (db.rs `Placement`). */
-const placementOf = (id: string) => ({
-  id,
-  adopted: items.find((x) => x.id === id)?.adopted ?? false,
-  parentId: items.find((x) => x.id === id)?.parentId ?? null,
-  folderId: folders.find((f) => inFolder(id, f.id))?.id ?? null,
-});
-
-function setFolder(id: string, folderId: string | null) {
-  [...itemFolders.keys()].filter((k) => k.startsWith(`${id}|`)).forEach((k) => itemFolders.delete(k));
-  if (folderId) link(id, folderId);
+/** Counts per value of each filter condition, as db.rs `facet_counts`. */
+function facets(q: ItemQuery) {
+  const r = matched(q);
+  const exts = countBy(r, (i) => ext(i.ext));
+  return {
+    ratings: countBy(r, (i) => String(i.rating)),
+    tags: Object.fromEntries(
+      tags.map((t) => [t.id, r.filter((i) => hasTag(i.id, t.id)).length]).filter(([, n]) => n),
+    ),
+    exts: Object.entries(exts).sort((x, y) => y[1] - x[1]),
+    ...fontCounts(r),
+  };
 }
 
 function query(q: ItemQuery): Item[] {
-  return withParentsOf(queryRows(q), q);
-}
-
-function queryRows(q: ItemQuery): Item[] {
   let r = matched(q);
   const v = q.view;
   // Pinned items lead every list, latest pin first.
   const pin = (a: MockItem, b: MockItem) => (b.pinnedAt ?? -Infinity) - (a.pinnedAt ?? -Infinity);
-  // The tray's own order ignores pins, as in db.rs.
+  // The shelf's own order ignores pins, as in db.rs.
   if (q.sort === "manual" && v.kind === "tray") {
     return [...r].sort((a, b) => tray.get(a.id)! - tray.get(b.id)!).map(view);
   }
@@ -800,17 +355,9 @@ function queryRows(q: ItemQuery): Item[] {
     return [...r].sort((a, b) => pin(a, b) || pos(a) - pos(b)).map(view);
   }
   const key = (i: MockItem): number | string =>
-    q.sort === "name"
-      ? i.name.toLowerCase()
-      : q.sort === "size"
-        ? i.size
-        : q.sort === "dimensions"
-          ? i.width * i.height
-          : q.sort === "rating"
-            ? i.rating
-            : i.importedAt;
+    q.sort === "name" ? i.name.toLowerCase() : q.sort === "size" ? i.size : q.sort === "rating" ? i.rating : i.importedAt;
   r = [...r].sort((a, b) => pin(a, b) || (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : 0) * (q.desc ? -1 : 1));
-  return (v.kind === "similar" ? similar(r, q.similarLevel ?? "standard") : r).map(view);
+  return r.map(view);
 }
 
 function removeFolder(fid: string) {
@@ -821,24 +368,13 @@ function removeFolder(fid: string) {
 
 const mockLibraries = [
   { root: "/mock/Demo.library", name: "Demo (mock)", favorite: true, lastOpened: 3, exists: true, current: true },
-  { root: "/Users/me/Pictures/Fonts.library", name: "Fonts", favorite: false, lastOpened: 2, exists: true, current: false },
+  { root: "/Users/me/Documents/Work.library", name: "Work", favorite: false, lastOpened: 2, exists: true, current: false },
   { root: "/Volumes/Archive/Old.library", name: "Old", favorite: false, lastOpened: 1, exists: false, current: false },
 ];
 
 // library.db `settings` (JSON by key) and settings.json's app settings.
 const librarySettings: Record<string, unknown> = {};
-const appSettings = { startup: "last", autoUpdate: true, sidebarHidden: {} };
-
-function countBy<T>(xs: T[], key: (x: T) => string): Record<string, number> {
-  const out: Record<string, number> = {};
-  for (const x of xs) out[key(x)] = (out[key(x)] ?? 0) + 1;
-  return out;
-}
-
-/** Keeps items of `kind` (all when null), like the `kind` argument in db.rs. */
-/** Items of `mode` (every item when not given). */
-const ofMode = (mode: Mode | null | undefined) => (xs: MockItem[]) =>
-  mode ? xs.filter((i) => modeOf(i.kind) === mode) : xs;
+const appSettings = { startup: "last", autoUpdate: true, sidebarHidden: [] as string[] };
 
 // The menu bar (src/lib/menuBar.ts): items by resource id, and the menu set
 // as the app menu, for checking its structure in the browser
@@ -857,14 +393,6 @@ function menuText(rid: number, depth = 0): string[] {
   const kids = (o.items ?? []).flatMap((i: [number, string]) => menuText(i[0], m.kind === "Menu" ? depth : depth + 1));
   return [...head, ...kids];
 }
-// A connection request as webimport.rs sends it, to see the question in the
-// browser: `window.__MOCK_PAIR__("Feedability")` for an app, no argument for
-// an extension.
-(window as unknown as { __MOCK_PAIR__: (app?: string) => void }).__MOCK_PAIR__ = (app) =>
-  void import("@tauri-apps/api/event").then(({ emit }) =>
-    emit("web-pair", { id: `mock${Date.now()}`, code: "4821", extension: app ? null : "abcdefghijklmnop", app: app ?? null }),
-  );
-
 (window as unknown as { __MOCK_MENU__: () => string }).__MOCK_MENU__ = () =>
   appMenu === null ? "(no menu)" : menuText(appMenu).join("\n");
 
@@ -886,14 +414,12 @@ function handle(cmd: string, a: any): unknown {
     if (item && op === "set_checked") item.options.checked = a.checked;
     return null;
   }
-  // Left out of a build with fewer features, like src-tauri/src/limits.rs.
-  if (LEFT_OUT.has(cmd)) throw "このビルドでは使えません";
   switch (cmd) {
     case "open_last_library":
     case "create_library":
     case "open_library":
-      // "Fonts" acts as open on another PC (library.lock), to try the question.
-      if (a.path?.endsWith("Fonts.library") && !a.force)
+      // "Work" acts as open on another PC (library.lock), to try the question.
+      if (a.path?.endsWith("Work.library") && !a.force)
         throw `LOCKED:${JSON.stringify({ machine: "x", name: "会議室の Windows", pid: 1, at: Date.now() - 60_000 })}`;
       return { root: "/mock/Demo.library", name: "Demo (mock)" };
     case "list_libraries":
@@ -921,60 +447,29 @@ function handle(cmd: string, a: any): unknown {
       mockLibraries.splice(mockLibraries.findIndex((x) => x.root === a.path), 1);
       return null;
     case "transfer_items": {
-      const ids: string[] = a.ids ?? items.filter((i) => i.kind === a.kind && i.deletedAt === null).map((i) => i.id);
+      const ids: string[] = a.ids ?? live().map((i) => i.id);
       if (a.moveItems) for (const i of items) if (ids.includes(i.id)) i.deletedAt = Date.now();
-      return { copied: ids.length - 1, duplicates: 1, failed: [], unusedKinds: {}, trashed: a.moveItems ? ids.length : null };
+      return { copied: ids.length - 1, duplicates: 1, failed: [], trashed: a.moveItems ? ids.length : null };
     }
     case "query_items":
       return query(a.query);
     case "facet_counts":
       return facets(a.query);
-    case "get_counts": {
-      const of = ofMode(a.mode);
+    case "get_counts":
       return {
-        all: of(live()).length,
-        unfiled: of(live()).filter((i) => !folders.some((f) => inFolder(i.id, f.id))).length,
-        untagged: of(live()).filter((i) => !tags.some((t) => hasTag(i.id, t.id))).length,
-        trash: of(items).length - of(live()).length,
-        favorites: of(live()).filter((i) => i.favorite).length,
-        pinned: of(live()).filter((i) => i.pinnedAt !== null).length,
-        tray: of(live()).filter((i) => tray.has(i.id)).length,
-        byKind: {
-          all: byKind(of(live())),
-          unfiled: byKind(of(live()).filter((i) => !folders.some((f) => inFolder(i.id, f.id)))),
-          untagged: byKind(of(live()).filter((i) => !tags.some((t) => hasTag(i.id, t.id)))),
-          trash: byKind(of(items).filter((i) => i.deletedAt !== null)),
-          favorites: byKind(of(live()).filter((i) => i.favorite)),
-          pinned: byKind(of(live()).filter((i) => i.pinnedAt !== null)),
-          tray: byKind(of(live()).filter((i) => tray.has(i.id))),
-        },
-        kinds: Object.fromEntries(
-          (["image", "font", "file", "text", "video", "bookmark"] as const)
-            .map((k) => [k, live().filter((i) => i.kind === k).length])
-            .filter(([, n]) => n),
-        ),
-        fontScripts: countBy(live().filter((i) => i.kind === "font"), (i) => i.fontScript ?? "other"),
-        fontCategories: countBy(
-          live().filter((i) => i.kind === "font"),
-          (i) => i.fontCategoryUser ?? i.fontCategory ?? "none",
-        ),
-        fontWeights: Object.fromEntries(
-          FONT_WEIGHT_RANGES.map(([k]) => [k, live().filter((i) => i.kind === "font" && inWeight(i, k)).length]).filter(
-            ([, n]) => n,
-          ),
-        ),
-        fontFeatures: countBy(
-          live().flatMap((i) => (i.kind === "font" ? (i.fontFeatures ?? []).map((k) => ({ k })) : [])),
-          (x) => x.k,
-        ),
+        all: live().length,
+        unfiled: live().filter((i) => !folders.some((f) => inFolder(i.id, f.id))).length,
+        untagged: live().filter((i) => !tags.some((t) => hasTag(i.id, t.id))).length,
+        trash: items.length - live().length,
+        favorites: live().filter((i) => i.favorite).length,
+        pinned: live().filter((i) => i.pinnedAt !== null).length,
+        tray: live().filter((i) => tray.has(i.id)).length,
+        ...fontCounts(live()),
       };
-    }
     case "selection_info": {
       const ids: string[] = a.ids;
       return {
-        tags: tags
-          .map((t) => ({ ...t, count: ids.filter((i) => hasTag(i, t.id)).length, byKind: {} }))
-          .filter((t) => t.count > 0),
+        tags: tags.map((t) => ({ ...t, count: ids.filter((i) => hasTag(i, t.id)).length })).filter((t) => t.count > 0),
         folders: folders
           .map((f) => ({ id: f.id, count: ids.filter((i) => inFolder(i, f.id)).length }))
           .filter((f) => f.count > 0),
@@ -987,34 +482,17 @@ function handle(cmd: string, a: any): unknown {
       items.find((i) => i.id === a.id)!.name = a.name;
       return;
     case "trash_items":
-      // "keep": the children of a trashed parent are freed instead of going along (docs/LINKS.md).
-      if (librarySettings.linksTrash === "keep") {
-        items
-          .filter((i) => i.parentId && a.ids.includes(i.parentId) && !a.ids.includes(i.id))
-          .forEach((i) => {
-            i.parentId = null;
-            i.adopted = false;
-          });
-      }
-      items
-        .filter((i) => a.ids.includes(i.id) || (i.parentId && a.ids.includes(i.parentId)))
-        .forEach((i) => (i.deletedAt ??= Date.now()));
+      items.filter((i) => a.ids.includes(i.id)).forEach((i) => (i.deletedAt ??= Date.now()));
       return;
     case "restore_items":
-      items
-        .filter((i) => a.ids.includes(i.id) || (i.parentId && a.ids.includes(i.parentId)))
-        .forEach((i) => (i.deletedAt = null));
+      items.filter((i) => a.ids.includes(i.id)).forEach((i) => (i.deletedAt = null));
       return;
     case "delete_items":
     case "empty_trash": {
       const del = cmd === "empty_trash" ? items.filter((i) => i.deletedAt !== null).map((i) => i.id) : a.ids;
       for (const d of del) items.splice(items.findIndex((i) => i.id === d), 1);
-      // Deleting a parent for good frees its children.
-      for (const i of items) if (i.parentId && del.includes(i.parentId)) i.parentId = null;
       return;
     }
-    case "video_codecs":
-      return { video: "H.264", audio: "AAC", frameRate: 29.97 };
     case "reveal_item":
     case "open_items":
       return;
@@ -1048,7 +526,7 @@ function handle(cmd: string, a: any): unknown {
       return cmd === "font_faces" ? faces : { faces, chars };
     }
     case "set_font_category": {
-      const fonts = items.filter((i) => a.ids.includes(i.id) && i.kind === "font");
+      const fonts = items.filter((i) => a.ids.includes(i.id));
       fonts.forEach((i) => (i.fontCategoryUser = a.category));
       return fonts.length;
     }
@@ -1060,104 +538,9 @@ function handle(cmd: string, a: any): unknown {
         faces: it.ext === "ttc" ? 2 : 1,
       };
     }
-    case "file_preview":
-      // No Quick Look / Office in the browser mock: the viewer shows the thumbnail.
-      return null;
-    case "prepare_file_thumbs":
-      return null;
-    case "read_text": {
-      const it = items.find((i) => i.id === a.id);
-      if (!it || it.kind !== "text") throw "テキストではありません";
-      return { text: it.body ?? "", encoding: "UTF-8", truncated: false, editable: true };
-    }
-    case "save_text": {
-      const it = items.find((i) => i.id === a.id)!;
-      it.body = a.text;
-      it.size = new TextEncoder().encode(a.text).length;
-      return { encoding: "UTF-8", encodingChanged: false };
-    }
-    case "create_bookmark": {
-      const m = /^https?:\/\/[^\s/]+[^\s#]*/i.exec(String(a.url).trim());
-      if (!m) throw "http:// か https:// で始まる URL を入れてください";
-      const url = m[0].replace(/\/+$/, "");
-      const found = items.find((i) => i.kind === "bookmark" && i.sourceUrl?.replace(/\/+$/, "") === url);
-      if (found) {
-        found.deletedAt = null;
-        return { id: found.id, duplicate: true };
-      }
-      const host = url.replace(/^https?:\/\/(www\.)?/i, "").split(/[/?]/)[0];
-      const it: MockItem = {
-        id: id(),
-        kind: "bookmark",
-        name: host,
-        fileName: `${host}.url`,
-        ext: "url",
-        width: 0,
-        height: 0,
-        size: url.length + 30,
-        thumb: "",
-        note: "",
-        rating: 0,
-        importedAt: Date.now(),
-        deletedAt: null,
-        favorite: false,
-        pinnedAt: null,
-        rotation: 0,
-        flipped: false,
-        hue: 200,
-        sourceUrl: url,
-      };
-      items.push(it);
-      if (a.folderId && folders.find((f) => f.id === a.folderId)?.mode === "stock") link(it.id, a.folderId);
-      return { id: it.id, duplicate: false };
-    }
-    case "create_text": {
-      const ext = String(a.name).split(".").pop()!.toLowerCase();
-      const it: MockItem = {
-        id: id(),
-        kind: "text",
-        name: a.name,
-        fileName: a.name,
-        ext,
-        width: 0,
-        height: 0,
-        size: new TextEncoder().encode(a.text).length,
-        thumb: "",
-        note: "",
-        rating: 0,
-        importedAt: Date.now(),
-        deletedAt: null,
-        favorite: false,
-        pinnedAt: null,
-        rotation: 0,
-        flipped: false,
-        hue: 0,
-        body: a.text,
-      };
-      items.push(it);
-      if (a.folderId && folders.find((f) => f.id === a.folderId)?.mode === "stock") link(it.id, a.folderId);
-      return it.id;
-    }
     case "font_data":
       // No font files in the browser mock: the viewer falls back to the system font.
       throw "モックではフォントを読み込めません";
-    case "orient_items": {
-      let n = 0;
-      for (const i of items.filter((i) => a.ids.includes(i.id) && i.kind === "image")) {
-        const r = i.rotation;
-        const [rotation, flipped] =
-          a.op === "rotateCw" ? [(r + 1) % 4, i.flipped]
-          : a.op === "rotateCcw" ? [(r + 3) % 4, i.flipped]
-          : a.op === "flipH" ? [(4 - r) % 4, !i.flipped]
-          : a.op === "flipV" ? [(6 - r) % 4, !i.flipped]
-          : [0, false];
-        if (rotation === r && flipped === i.flipped) continue;
-        if (rotation % 2 !== r % 2) [i.width, i.height] = [i.height, i.width];
-        Object.assign(i, { rotation, flipped });
-        n++;
-      }
-      return n;
-    }
     case "add_system_to_tray": {
       const fresh = systemFonts.filter((f) => a.ids.includes(f.id) && !tray.has(f.id));
       fresh.forEach((f) => {
@@ -1171,7 +554,7 @@ function handle(cmd: string, a: any): unknown {
       return { order, fonts: order.flatMap((i) => (systemTrayNames.has(i) ? [{ id: i, name: systemTrayNames.get(i)! }] : [])) };
     }
     case "library_font_ps_names":
-      return [...new Set(items.flatMap((i) => (i.kind === "font" && i.deletedAt === null && i.fontPsName ? [i.fontPsName] : [])))];
+      return [...new Set(items.flatMap((i) => (i.deletedAt === null && i.fontPsName ? [i.fontPsName] : [])))];
     case "add_to_tray": {
       const fresh = (a.ids as string[]).filter((i) => !tray.has(i) && items.some((x) => x.id === i));
       fresh.forEach((i) => tray.set(i, ++traySeq));
@@ -1199,15 +582,6 @@ function handle(cmd: string, a: any): unknown {
       order.forEach((i, n) => tray.set(i, n + 1));
       return;
     }
-    case "sheet_image": {
-      const it = items.find((i) => i.id === a.id)!;
-      return sheetImage(it, a.maxSide);
-    }
-    case "save_file":
-    case "copy_image":
-      console.info(`[mock] ${cmd}`, a instanceof Uint8Array ? `${a.length} bytes` : a);
-      (window as unknown as { __MOCK_LAST_FILE__: unknown }).__MOCK_LAST_FILE__ = a;
-      return;
     case "reveal_path":
     case "reveal_log":
       return;
@@ -1223,78 +597,20 @@ function handle(cmd: string, a: any): unknown {
     }
     case "cancel_export":
       return null;
-    case "index_similar":
     case "index_fonts":
       return 0;
-    case "dismiss_duplicates": {
-      const batch = ++dismissSeq;
-      for (const p of pairsOf(a.ids as string[])) if (!dismissed.has(p)) dismissed.set(p, batch);
-      return null;
-    }
-    case "undismiss_duplicates":
-      for (const p of pairsOf(a.ids as string[])) dismissed.delete(p);
-      return null;
-    case "clear_dismissed_duplicates":
-      dismissed.clear();
-      return null;
-    case "count_dismissed_duplicates":
-      return new Set(dismissed.values()).size;
-    case "preview_duplicates":
-    case "resolve_duplicates": {
-      const effects = (a.groups as { keep: string; remove: string[] }[]).map((g) => {
-        const keep = items.find((i) => i.id === g.keep)!;
-        const removed = g.remove.map((rid) => items.find((i) => i.id === rid)!);
-        const addedTags = tags
-          .filter((t) => !hasTag(keep.id, t.id) && g.remove.some((rid) => hasTag(rid, t.id)))
-          .map((t) => t.name);
-        const best = Math.max(...removed.map((i) => i.rating));
-        const hasFolder = folders.some((f) => inFolder(keep.id, f.id));
-        const folderId = hasFolder
-          ? null
-          : (folders.find((f) => g.remove.some((rid) => inFolder(rid, f.id)))?.id ?? null);
-        return {
-          keep: g.keep,
-          remove: g.remove,
-          addedTags,
-          rating: best > keep.rating ? best : null,
-          ratingBefore: keep.rating,
-          folderId,
-        };
-      });
-      if (cmd === "resolve_duplicates") {
-        for (const e of effects) {
-          const keep = items.find((i) => i.id === e.keep)!;
-          for (const rid of e.remove) {
-            tags.forEach((t) => hasTag(rid, t.id) && itemTags.add(`${keep.id}|${t.id}`));
-            items.find((i) => i.id === rid)!.deletedAt ??= Date.now();
-          }
-          if (e.rating != null) keep.rating = e.rating;
-          if (e.folderId) link(keep.id, e.folderId);
-        }
-      }
-      return effects;
-    }
     case "supported_exts":
-      // A build with fewer kinds takes theirs only (src-tauri/src/limits.rs `accepts`).
-      return KIND_EXTS.filter(([k]) => buildHas(k)).flatMap(([, exts]) => exts);
+      return FONT_EXTS;
     case "import_paths":
     case "import_bytes":
       return { imported: 0, duplicates: 0, failed: ["mock backend: import is not available in the browser"] };
     case "list_folders":
-      return folders
-        .filter((f) => !a.mode || f.mode === a.mode)
-        .map((f) => {
-          const of = ofMode(f.mode)(live()).filter((i) => inFolder(i.id, f.id));
-          return { ...f, count: of.length, byKind: byKind(of) };
-        });
+      return folders.map((f) => ({ ...f, count: live().filter((i) => inFolder(i.id, f.id)).length }));
     case "place_folder":
-      // Not under a folder of the other mode.
-      if (a.parentId && folders.find((f) => f.id === a.parentId)?.mode !== folders.find((f) => f.id === a.id)?.mode)
-        return false;
       return placeFolder(a.id, a.parentId ?? null, a.before ?? null);
     case "shift_folder": {
       const f = folders.find((x) => x.id === a.id)!;
-      reorderSiblings(f.parentId, f.mode, (sibs) => {
+      reorderSiblings(f.parentId, (sibs) => {
         const from = sibs.findIndex((f) => f.id === a.id);
         const [f] = sibs.splice(from, 1);
         sibs.splice(Math.max(0, Math.min(sibs.length, from + a.by)), 0, f);
@@ -1303,19 +619,12 @@ function handle(cmd: string, a: any): unknown {
       return;
     }
     case "sort_folders_by_name":
-      reorderSiblings(a.parentId ?? null, folders.find((f) => f.id === a.parentId)?.mode ?? a.mode, (sibs) =>
-        [...sibs].sort((x, y) => x.name.localeCompare(y.name)),
-      );
+      reorderSiblings(a.parentId ?? null, (sibs) => [...sibs].sort((x, y) => x.name.localeCompare(y.name)));
       return;
     case "list_smart_folders":
-      return smartFolders
-        .filter((f) => !a.mode || f.mode === a.mode)
-        .map((f) => {
-          const of = applyRule(ofMode(f.mode)(live()), f.rule);
-          return { ...f, count: of.length, byKind: byKind(of) };
-        });
+      return smartFolders.map((f) => ({ ...f, count: applyRule(live(), f.rule).length }));
     case "create_smart_folder": {
-      const f = { id: id(), name: a.name, rule: a.rule, color: null, mode: a.mode as Mode };
+      const f = { id: id(), name: a.name, rule: a.rule, color: null };
       smartFolders.push(f);
       return f.id;
     }
@@ -1330,13 +639,11 @@ function handle(cmd: string, a: any): unknown {
       return;
     case "list_exts": {
       const m = new Map<string, number>();
-      ofMode(a.mode)(live()).forEach((i) => m.set(aliases(i.ext), (m.get(aliases(i.ext)) ?? 0) + 1));
+      live().forEach((i) => m.set(ext(i.ext), (m.get(ext(i.ext)) ?? 0) + 1));
       return [...m.entries()].sort((x, y) => y[1] - x[1]);
     }
     case "create_folder": {
-      // A subfolder is of its parent's mode.
-      const mode: Mode = folders.find((x) => x.id === a.parentId)?.mode ?? a.mode;
-      const f = { id: id(), parentId: a.parentId ?? null, name: a.name, color: null, mode };
+      const f = { id: id(), parentId: a.parentId ?? null, name: a.name, color: null };
       folders.push(f);
       return f.id;
     }
@@ -1348,107 +655,9 @@ function handle(cmd: string, a: any): unknown {
       return;
     case "move_folder":
       return placeFolder(a.id, a.parentId ?? null, null);
-    case "move_to_folder": {
-      // Only the items of the folder's mode go in.
-      const mode = folders.find((f) => f.id === a.folderId)?.mode;
-      withLinked(a.ids)
-        .filter((i: string) => modeOfItem(i) === mode)
-        .forEach((i: string) => link(i, a.folderId));
+    case "move_to_folder":
+      a.ids.forEach((i: string) => link(i, a.folderId));
       return;
-    }
-    // Parent–child links (docs/LINKS.md; db.rs link_items and friends).
-    case "link_items": {
-      if (librarySettings.links !== true) throw "親子関係が無効です。設定で有効にしてください。";
-      const parent = items.find((i) => i.id === a.parentId);
-      if (!parent || parent.parentId || parent.deletedAt !== null || modeOf(parent.kind) !== "stock") return [];
-      const moved = [];
-      for (const id of a.ids as string[]) {
-        const c = items.find((i) => i.id === id);
-        if (!c || c.id === parent.id || c.deletedAt !== null || modeOf(c.kind) !== "stock") continue;
-        if (items.some((i) => i.parentId === c.id)) continue;
-        moved.push(placementOf(id));
-        c.parentId = parent.id;
-        c.adopted = false;
-        setFolder(id, folders.find((f) => inFolder(parent.id, f.id))?.id ?? null);
-      }
-      return moved;
-    }
-    case "unlink_items": {
-      const out = [];
-      for (const id of a.ids as string[]) {
-        const c = items.find((i) => i.id === id);
-        if (!c?.parentId) continue;
-        out.push(placementOf(id));
-        c.parentId = null;
-        c.adopted = false;
-      }
-      return out;
-    }
-    // A video's own thumbnail (videos/thumb.rs). A file or the clipboard can't be read here: a stand-in.
-    case "set_video_thumb": {
-      const v = items.find((i) => i.id === a.id);
-      if (!v || v.kind !== "video") throw "サムネイルを変えられるのは動画だけです";
-      const src: { from: string; id?: string } = a.source;
-      const from =
-        src.from === "item"
-          ? items.find((i) => i.id === src.id)
-          : src.from === "adopted"
-            ? items.find((i) => i.parentId === v.id && i.adopted && i.deletedAt === null)
-            : { ...v, kind: "image" as const, hue: (v.hue + 180) % 360 };
-      if (!from) throw src.from === "adopted" ? "採用した子がありません" : "画像が見つかりません";
-      v.customThumb = view(from).thumbPath;
-      return `${v.id}_c${Date.now()}.jpg`;
-    }
-    case "reset_video_thumb": {
-      const v = items.find((i) => i.id === a.id);
-      if (v) delete v.customThumb;
-      return;
-    }
-    case "make_parent": {
-      if (librarySettings.links !== true) throw "親子関係が無効です。設定で有効にしてください。";
-      const c = items.find((i) => i.id === a.id);
-      const old = c?.parentId && items.find((i) => i.id === c.parentId);
-      if (!c || !old) return [];
-      const siblings = items.filter((i) => i.parentId === old.id && i.id !== c.id);
-      const was = [c, old, ...siblings].map((i) => placementOf(i.id));
-      c.parentId = null;
-      c.adopted = false;
-      old.parentId = c.id;
-      old.adopted = false;
-      siblings.forEach((i) => (i.parentId = c.id));
-      return was;
-    }
-    case "restore_links":
-      for (const p of a.placements as ReturnType<typeof placementOf>[]) {
-        const c = items.find((i) => i.id === p.id);
-        if (!c) continue;
-        c.parentId = p.parentId;
-        c.adopted = p.adopted;
-        setFolder(p.id, p.folderId);
-      }
-      return;
-    case "set_adopted": {
-      const c = items.find((i) => i.id === a.id);
-      if (!c?.parentId) return;
-      if (a.on) items.filter((i) => i.parentId === c.parentId).forEach((i) => (i.adopted = false));
-      c.adopted = a.on;
-      return;
-    }
-    case "count_links":
-      return items.filter((i) => i.parentId).length;
-    case "set_links_enabled": {
-      if (a.on) {
-        librarySettings.links = true;
-        return 0;
-      }
-      const n = items.filter((i) => i.parentId).length;
-      items.forEach((i) => {
-        i.parentId = null;
-        i.adopted = false;
-      });
-      delete librarySettings.links;
-      return n;
-    }
     case "reorder_in_folder": {
       const order = [...itemFolders.entries()]
         .filter(([k]) => k.endsWith(`|${a.folderId}`))
@@ -1461,16 +670,12 @@ function handle(cmd: string, a: any): unknown {
       return;
     }
     case "remove_from_folder":
-      withLinked(a.ids).forEach((i: string) => itemFolders.delete(`${i}|${a.folderId}`));
+      a.ids.forEach((i: string) => itemFolders.delete(`${i}|${a.folderId}`));
       return;
     case "list_tags":
       return [...tags]
-        .filter((t) => !a.mode || t.mode === a.mode)
         .sort((x, y) => x.name.localeCompare(y.name))
-        .map((t) => {
-          const of = ofMode(t.mode)(live()).filter((i) => hasTag(i.id, t.id));
-          return { ...t, count: of.length, byKind: byKind(of) };
-        }) satisfies Tag[];
+        .map((t) => ({ ...t, count: live().filter((i) => hasTag(i.id, t.id)).length })) satisfies Tag[];
     case "add_tags":
       addTags(a.ids, a.names);
       return;
@@ -1488,9 +693,7 @@ function handle(cmd: string, a: any): unknown {
       return;
     case "rename_tag": {
       const t = tags.find((x) => x.id === a.id)!;
-      const other = tags.find(
-        (x) => x.id !== a.id && x.mode === t.mode && x.name.toLowerCase() === a.name.trim().toLowerCase(),
-      );
+      const other = tags.find((x) => x.id !== a.id && x.name.toLowerCase() === a.name.trim().toLowerCase());
       if (other) {
         [...itemTags].filter((k) => k.endsWith(`|${t.id}`)).forEach((k) => {
           itemTags.delete(k);
@@ -1508,10 +711,8 @@ function handle(cmd: string, a: any): unknown {
     case "plugin:dialog|confirm":
       return window.confirm(a.message);
     case "plugin:dialog|open":
-      return null;
     case "plugin:dialog|save":
-      // Lets the contact sheet be "saved" (see save_file); other saves are cancelled.
-      return a.options?.title === "まとめて出力" ? `/mock/${a.options.defaultPath}` : null;
+      return null;
     default:
       console.warn("[mock] unhandled command", cmd, a);
       return null;

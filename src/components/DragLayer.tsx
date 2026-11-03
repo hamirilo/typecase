@@ -1,11 +1,11 @@
-// In-app drag & drop (images -> folder, folder -> folder) built on pointer
+// In-app drag & drop (fonts -> folder, folder -> folder) built on pointer
 // events. HTML5 DnD is avoided because Tauri's native file-drop handling
 // disables it on Windows.
 import { startDrag } from "@crabnebula/tauri-plugin-drag";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { Plus } from "lucide-react";
 import { useEffect, useRef } from "react";
-import { addToTray, linkItems, moveToFolder, reorder, reorderShelf } from "../lib/actions";
+import { addToTray, moveToFolder, reorder, reorderShelf } from "../lib/actions";
 import { api, isSystemId, libraryIds, type Folder } from "../lib/api";
 import { warn } from "../lib/log";
 import { useStore, type Drag } from "../store";
@@ -54,35 +54,12 @@ function isDescendant(folders: Folder[], id: string, ancestor: string): boolean 
 }
 
 /**
- * "link:<id>": a row under the pointer that the dragged items can be linked to as children
- * (docs/LINKS.md). On a list that reorders by hand (`item:` targets) only the middle of the row
- * links, so its edges still reorder.
- */
-function linkTargetAt(x: number, y: number, drag: Drag): string | null {
-  if (drag.kind !== "items" || drag.from === "shelf" || drag.ids.some(isSystemId)) return null;
-  const el = document.elementFromPoint(x, y)?.closest<HTMLElement>("[data-link]");
-  const id = el?.dataset.link;
-  if (!el || !id || drag.ids.includes(id)) return null;
-  // Already its children: nothing to do.
-  const raw = useStore.getState().rawItems;
-  if (drag.ids.every((d) => raw.find((i) => i.id === d)?.parentId === id)) return null;
-  if (el.dataset.drop?.startsWith("item:")) {
-    const r = el.getBoundingClientRect();
-    const rel = el.dataset.axis === "y" ? (y - r.top) / r.height : (x - r.left) / r.width;
-    if (rel < 0.25 || rel > 0.75) return null;
-  }
-  return `link:${id}`;
-}
-
-/**
  * The drop target under the pointer, or null if this drag can't go there.
  * "folder:<id>" | "root" | "tray" (the shelf) | "item:<id>:before|after" (manual reordering)
- * | "link:<id>" (linking to an item) | "shelf:<id>:before|after" (reordering the shelf) | "pos:folder:<id>:before|after"
+ * | "shelf:<id>:before|after" (reordering the shelf) | "pos:folder:<id>:before|after"
  * (folder reordering among siblings).
  */
 function targetAt(x: number, y: number, drag: Drag): string | null {
-  const link = linkTargetAt(x, y, drag);
-  if (link) return link;
   const el = document.elementFromPoint(x, y)?.closest<HTMLElement>("[data-drop]");
   const t = el?.dataset.drop ?? null;
   if (!t || !el) return null;
@@ -125,18 +102,13 @@ function targetAt(x: number, y: number, drag: Drag): string | null {
 }
 
 function targetRect(target: string): DOMRect | null {
-  if (target.startsWith("link:")) {
-    return document.querySelector(`[data-link="${CSS.escape(target.slice(5))}"]`)?.getBoundingClientRect() ?? null;
-  }
   const base = target.replace(/:(before|after)$/, "").replace(/^pos:/, "");
   return document.querySelector(`[data-drop="${CSS.escape(base)}"]`)?.getBoundingClientRect() ?? null;
 }
 
 async function drop(drag: Drag, target: string) {
   const s = useStore.getState();
-  if (drag.kind === "items" && target.startsWith("link:")) {
-    await linkItems(target.slice(5), drag.ids);
-  } else if (drag.kind === "items" && target.startsWith("item:")) {
+  if (drag.kind === "items" && target.startsWith("item:")) {
     const [, id, side] = target.split(":");
     // Keep the dragged items in their current visual order.
     const moving = s.items.filter((i) => drag.ids.includes(i.id)).map((i) => i.id);
@@ -180,7 +152,7 @@ async function drop(drag: Drag, target: string) {
 }
 
 /**
- * Leaving the window with images hands the drag to the OS (drop into other
+ * Leaving the window with fonts hands the drag to the OS (drop into other
  * apps). Not the installed fonts: they aren't handed out as files.
  */
 function dragOut(drag: Drag & { kind: "items" }) {
@@ -195,12 +167,8 @@ function dragOut(drag: Drag & { kind: "items" }) {
   );
 }
 
-function targetLabel(target: string | null, folders: Folder[], items: { id: string; name: string }[]): string | null {
+function targetLabel(target: string | null, folders: Folder[]): string | null {
   if (!target) return null;
-  if (target.startsWith("link:")) {
-    const name = items.find((i) => i.id === target.slice(5))?.name;
-    return name ? `「${name}」に紐づける` : "紐づける";
-  }
   if (target === "root") return "最上位へ移動";
   if (target === "tray") return "シェルフに追加";
   if (target.startsWith("item:") || target.startsWith("shelf:")) return "ここへ並べ替え";
@@ -294,7 +262,7 @@ export function DragLayer() {
   }, [active]);
 
   if (!drag) return null;
-  const label = targetLabel(dropTarget, folders, items);
+  const label = targetLabel(dropTarget, folders);
 
   return (
     <div

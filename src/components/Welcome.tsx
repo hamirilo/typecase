@@ -11,7 +11,7 @@ export function Welcome() {
       <Library size={56} strokeWidth={1.25} className="text-accent" />
       <div className="text-center">
         <h1 className="text-xl font-semibold">Typecase</h1>
-        <p className="mt-1 text-dim">画像はライブラリフォルダにコピーして管理されます</p>
+        <p className="mt-1 text-dim">フォントはライブラリフォルダにコピーして管理されます</p>
       </div>
       <div className="flex flex-col gap-2">
         <button onClick={createLibraryDialog} className={`${btn} bg-accent-fill text-white`}>

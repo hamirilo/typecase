@@ -2,7 +2,7 @@
 // mode's "この端末のフォント", a read-only list that is not in the library.
 // Rust reads the font folders (src-tauri/src/fonts/system.rs); the list is
 // filtered, searched and sorted here instead of in SQL (db.rs `query_where`),
-// with the same meaning for the conditions the font mode offers.
+// with the same meaning for the conditions the filter row offers.
 //
 // Installed fonts also go on the font shelf next to the library's (`fontShelf`),
 // and the same font in the library and installed is marked on both sides
@@ -38,26 +38,19 @@ const WEIGHT_RANGES: Record<string, [number, number]> = {
 export function systemItem(f: SystemFont): Item {
   return {
     id: f.id,
-    kind: "font",
     name: f.name,
     fileName: f.fileName,
     ext: f.ext,
-    width: 0,
-    height: 0,
     size: f.size,
     thumb: "",
     note: "",
     rating: 0,
     importedAt: f.modified,
     deletedAt: null,
-    preview: null,
     favorite: false,
     pinnedAt: null,
-    rotation: 0,
-    flipped: false,
     folderId: null,
     tagIds: [],
-    sourceUrl: null,
     fontFamily: f.family,
     fontWeight: f.weight,
     fontScript: f.script,
@@ -65,15 +58,10 @@ export function systemItem(f: SystemFont): Item {
     fontCategoryUser: null,
     fontFeatures: f.features,
     fontPsName: f.psName || null,
-    durationMs: null,
     inTray: false,
-    parentId: null,
-    adopted: false,
     filePath: f.path,
     // No rendered sample: rows and tiles draw in the font itself.
     thumbPath: "",
-    displayPath: f.path,
-    ownThumb: false,
   };
 }
 
@@ -115,6 +103,7 @@ function matches(f: SystemFont, q: ItemQuery, without?: Condition): boolean {
   if (on("fontWeights") && c.fontWeights.length && !c.fontWeights.some((k) => inWeight(f, k))) return false;
   if (on("fontFeatures") && c.fontFeatures.length && !c.fontFeatures.some((k) => f.features.includes(k))) return false;
   if (on("exts") && c.exts.length && !c.exts.includes(f.ext)) return false;
+  if ((c.minSize != null && f.size < c.minSize) || (c.maxSize != null && f.size > c.maxSize)) return false;
   return true;
 }
 
@@ -159,16 +148,11 @@ export async function systemFacetCounts(q: ItemQuery): Promise<Facets> {
   return {
     ratings: {},
     tags: {},
-    kinds: {},
     exts: Object.entries(exts).sort((a, b) => b[1] - a[1]),
-    shapes: {},
     fontScripts: count("fontScripts", (f) => [f.script]),
     fontCategories: count("fontCategories", (f) => [f.category ?? "none"]),
     fontWeights: count("fontWeights", (f) => Object.keys(WEIGHT_RANGES).filter((k) => inWeight(f, k))),
     fontFeatures: count("fontFeatures", (f) => f.features),
-    parents: 0,
-    children: 0,
-    unlinked: 0,
   };
 }
 
@@ -245,7 +229,7 @@ export const useFontLinks = create<{ installed: ReadonlySet<string> | null; libr
 );
 
 /**
- * Reads both sides again (the font mode's refresh). The installed fonts are
+ * Reads both sides again (on every refresh). The installed fonts are
  * read in the background the first time, so the library's list isn't held up.
  */
 export function refreshFontLinks() {

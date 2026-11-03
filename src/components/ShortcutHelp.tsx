@@ -1,11 +1,9 @@
 import { Keyboard, Search, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { create } from "zustand";
-import { kindLabel } from "../lib/api";
 import { isMac, keyParts, matchRow, shortcutSections } from "../lib/shortcuts";
 import { composing } from "../lib/ime";
-import { useShallow } from "zustand/react/shallow";
-import { listKinds, useStore } from "../store";
+import { useStore } from "../store";
 
 export const useShortcutHelp = create<{ open: boolean; setOpen: (open: boolean) => void }>((set) => ({
   open: false,
@@ -53,7 +51,6 @@ export function ShortcutHelp() {
 
 function Panel() {
   const setOpen = useShortcutHelp((s) => s.setOpen);
-  const kinds = useStore(useShallow(listKinds));
   const layout = useStore((s) => s.layout);
   const inViewer = useStore((s) => s.viewer !== null);
   const [query, setQuery] = useState("");
@@ -120,23 +117,9 @@ function Panel() {
                   <h3 className="mb-1 text-xs font-semibold text-dim">{s.title}</h3>
                   <ul>
                     {s.rows.map(({ row, label }) => {
-                      // Shown but faded where it doesn't apply (e.g. rotating fonts).
-                      const off = row.kinds && !kinds.some((k) => row.kinds!.includes(k));
                       return (
-                        <li
-                          key={label}
-                          className={`flex items-start justify-between gap-3 border-b border-line/50 py-1.5 ${
-                            off ? "opacity-45" : ""
-                          }`}
-                        >
-                          <span className="min-w-0 pt-px">
-                            {label}
-                            {off && (
-                              <span className="ml-1.5 text-[11px] text-dim">
-                                {row.kinds!.map(kindLabel).join("・")}のみ
-                              </span>
-                            )}
-                          </span>
+                        <li key={label} className="flex items-start justify-between gap-3 border-b border-line/50 py-1.5">
+                          <span className="min-w-0 pt-px">{label}</span>
                           <span className="flex shrink-0 flex-wrap items-center justify-end gap-x-1 gap-y-1">
                             {row.keys.map((k, i) => (
                               <span key={k} className="flex items-center gap-1">

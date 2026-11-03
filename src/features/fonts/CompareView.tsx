@@ -113,8 +113,7 @@ export function CompareView() {
         tagMatchAll: false,
         includeSubfolders: false,
         minRating: 0,
-        filter: { ...EMPTY_FILTER, kinds: ["font"] },
-        similarLevel: "standard",
+        filter: EMPTY_FILTER,
         sort: "name",
         desc: false,
       })
@@ -162,7 +161,7 @@ export function CompareView() {
     persist("compareText", t);
   };
 
-  const fonts = shelf.filter((i) => i.kind === "font").slice(0, FONT_SHELF_MAX);
+  const fonts = shelf.slice(0, FONT_SHELF_MAX);
   const left = FONT_SHELF_MAX - fonts.length;
   const step = "flex h-6 w-5 shrink-0 items-center justify-center rounded text-dim hover:bg-white/8 hover:text-fg";
 
