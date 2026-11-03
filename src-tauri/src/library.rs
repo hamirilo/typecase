@@ -103,6 +103,15 @@ impl Library {
         if !root.join(DB_FILE).is_file() {
             return Err(format!("ライブラリではありません: {}", root.display()));
         }
+        // A Stockroom library (its files are under images/) has another
+        // schema at a higher version, so migrate() would not touch it and the
+        // queries would fail. Typecase doesn't read those libraries.
+        if root.join("images").is_dir() {
+            return Err(format!(
+                "Stockroom のライブラリは開けません: {}。Stockroom でフォントを書き出し、Typecase に取り込み直してください",
+                root.display()
+            ));
+        }
         Self::load(root)
     }
 
@@ -211,6 +220,18 @@ mod tests {
 
     fn holder(machine: &str, pid: u32, at: i64) -> Holder {
         Holder { machine: machine.into(), name: format!("PC {machine}"), pid, at }
+    }
+
+    #[test]
+    fn refuses_a_stockroom_library() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("Old.library");
+        fs::create_dir_all(root.join("images")).unwrap();
+        fs::write(root.join(DB_FILE), b"").unwrap();
+        let e = Library::open(&root).err().unwrap();
+        assert!(e.contains("Stockroom"), "{e}");
+        // Nothing was written into it.
+        assert!(!root.join(FILES_DIR).exists());
     }
 
     #[test]
