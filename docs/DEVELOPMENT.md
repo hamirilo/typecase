@@ -61,13 +61,20 @@ src-tauri/examples/seed.rs  テストデータ生成（フォルダのフォン�
 - `Typecase_X.Y.Z_aarch64.dmg` / `-setup.exe`：初回インストール用
 - `Typecase.app.tar.gz` と `.sig`、`-setup.exe` の `.sig`、`latest.json`：アプリ内アップデート用（tauri-action が生成）
 
-更新ファイルの署名鍵は GitHub Actions の Secrets に置く（`TAURI_SIGNING_PRIVATE_KEY`：秘密鍵ファイルの中身、`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`：パスワード、未設定なら空）。対応する公開鍵は `tauri.conf.json` の `plugins.updater.pubkey`（Stockroom と同じ鍵）。**秘密鍵を失うと配布済みのアプリに更新を届けられなくなる**ので、必ずバックアップを取る。鍵の作り直しは `bunx tauri signer generate -w ~/.tauri/image-library.key`。
+更新ファイルの署名鍵は GitHub Actions の Secrets に置く（`TAURI_SIGNING_PRIVATE_KEY`：秘密鍵ファイルの中身、`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`：パスワード）。対応する公開鍵は `tauri.conf.json` の `plugins.updater.pubkey`。鍵は Typecase 専用で、Stockroom の鍵とは別のもの（Stockroom の更新が Typecase に入ることはない。逆も同じ）。**秘密鍵を失うと配布済みのアプリに更新を届けられなくなる**ので、必ずバックアップを取る。
 
 ローカルで配布用ビルドをするときも署名鍵が要る（`createUpdaterArtifacts` が有効なため）。
 
 ```bash
-TAURI_SIGNING_PRIVATE_KEY="$(cat ~/.tauri/image-library.key)" bun run tauri build
+TAURI_SIGNING_PRIVATE_KEY="$(cat ~/.tauri/typecase.key)" TAURI_SIGNING_PRIVATE_KEY_PASSWORD='…' bun run tauri build
 ```
+
+#### 今の鍵は一時的なもの
+
+今の鍵（公開鍵の ID `9ED0C9CBF04C7649`）は、本番の配布の前に替える前提の一時的なもの。替えるときは次のどちらか。
+
+- **まだ自分しか使っていないうち**：新しい鍵を作り（`bunx tauri signer generate -w ~/.tauri/typecase.key`）、`pubkey` と Secrets を差し替え、新しい版を手で入れ直す。古い鍵は捨ててよい
+- **配った人がいるとき**：入っているアプリは自分の中の公開鍵で更新を確かめるので、2 回に分ける。① 新しい公開鍵を入れた版を、**今の鍵で**署名して出す ② その次の版から新しい鍵で署名する。①を飛ばすか今の秘密鍵をなくすと、配った人は自動で更新できず、入れ直しになる。切り替えが終わるまで今の秘密鍵は消さない
 
 ### リリースノート
 

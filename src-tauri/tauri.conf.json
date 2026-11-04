@@ -73,7 +73,7 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDdDOEYwRjQ0RTJBQTU2MDQKUldRRVZxcmlSQStQZkttbkN4UmdGRkZpRUN5ZEI0OWxBUEtCcnJHL3gvQ2ZrelZ6T2VEK2hVMFUK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDlFRDBDOUNCRjA0Qzc2NDkKUldSSmRrend5OG5RbmlqRjFVVUpmV1ZmQXR2T0RvemdSME02OXNSQnFTZm9kdUw1aDJQOUJPVmkK",
       "endpoints": ["https://github.com/hamirilo/typecase/releases/latest/download/latest.json"],
       "windows": { "installMode": "passive" }
     }
