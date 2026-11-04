@@ -97,8 +97,8 @@ export function SystemFontPanel({ single, ids }: { single: Item | undefined; ids
       <button
         onClick={() => void toggleTray(ids)}
         title="シェルフに置いて、ライブラリのフォントと並べて比べる（B）"
-        className={`mt-4 flex h-8 items-center justify-center gap-1.5 rounded-md border border-edge bg-control hover:bg-white/12 ${
-          shelved ? "text-emerald-400" : ""
+        className={`mt-4 flex h-8 items-center justify-center gap-1.5 rounded-md border border-edge bg-control hover:bg-ink/12 ${
+          shelved ? "text-emerald-600 dark:text-emerald-400" : ""
         }`}
       >
         <Layers size={14} />

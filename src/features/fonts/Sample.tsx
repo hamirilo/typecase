@@ -43,7 +43,7 @@ export function Sample({
           <span
             key={i}
             title="このフォントに無い文字（システムのフォントで表示）"
-            className="text-red-300 underline decoration-red-400/70 decoration-dotted"
+            className="text-red-700 dark:text-red-300 underline decoration-red-400/70 decoration-dotted"
             style={{ fontFamily: "sans-serif" }}
           >
             {r.s}

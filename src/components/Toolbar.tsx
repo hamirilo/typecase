@@ -119,7 +119,7 @@ export function Toolbar() {
           <button
             title={`サイドバーを${sidebarOpen ? "隠す" : "表示"}（Tab / ⌘⌥1）`}
             onClick={toggleSidebar}
-            className={`-ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-md hover:bg-white/5 ${
+            className={`-ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-md hover:bg-ink/5 ${
               sidebarOpen ? "text-dim" : "text-accent"
             }`}
           >
@@ -164,7 +164,7 @@ export function Toolbar() {
         <div className="flex flex-1 items-center justify-end gap-2">
           <label
             title={SEARCH_HELP}
-            className="flex h-8 min-w-28 shrink basis-60 items-center gap-2 rounded-md border border-transparent bg-white/7 px-2 focus-within:border-accent @max-xl:min-w-0 @max-xl:flex-1"
+            className="flex h-8 min-w-28 shrink basis-60 items-center gap-2 rounded-md border border-transparent bg-ink/7 px-2 focus-within:border-accent @max-xl:min-w-0 @max-xl:flex-1"
           >
             <Search size={14} className="shrink-0 text-dim" />
             <input

@@ -163,7 +163,7 @@ export function CompareView() {
 
   const fonts = shelf.slice(0, FONT_SHELF_MAX);
   const left = FONT_SHELF_MAX - fonts.length;
-  const step = "flex h-6 w-5 shrink-0 items-center justify-center rounded text-dim hover:bg-white/8 hover:text-fg";
+  const step = "flex h-6 w-5 shrink-0 items-center justify-center rounded text-dim hover:bg-ink/8 hover:text-fg";
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -172,7 +172,7 @@ export function CompareView() {
           <button
             onClick={() => setComparing(false)}
             title="一覧へ戻る（Esc）"
-            className="-ml-1 flex h-7 items-center gap-1.5 rounded-md px-2 hover:bg-white/5"
+            className="-ml-1 flex h-7 items-center gap-1.5 rounded-md px-2 hover:bg-ink/5"
           >
             <ArrowLeft size={14} /> 一覧へ戻る
           </button>
@@ -263,7 +263,7 @@ export function CompareView() {
           ) : (
             <button
               onClick={() => setEditing(true)}
-              className="h-6 rounded-md border border-dashed border-line px-2 text-dim hover:bg-white/5 hover:text-fg"
+              className="h-6 rounded-md border border-dashed border-line px-2 text-dim hover:bg-ink/5 hover:text-fg"
             >
               自分の文字を足す
             </button>

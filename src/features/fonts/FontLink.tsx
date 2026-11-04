@@ -17,7 +17,7 @@ export function FontLinkBadge({ item, compact = false }: { item: Item; compact?:
   return (
     <span
       title={title}
-      className={`flex shrink-0 items-center gap-1 rounded text-sky-300 ${compact ? "" : "bg-sky-400/10 px-1.5 py-px"}`}
+      className={`flex shrink-0 items-center gap-1 rounded text-sky-700 dark:text-sky-300 ${compact ? "" : "bg-sky-400/10 px-1.5 py-px"}`}
     >
       <Icon size={compact ? 12 : 11} />
       {!compact && (installed ? "インストール済み" : "ライブラリにある")}

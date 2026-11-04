@@ -190,7 +190,7 @@ export function DisplayMenu() {
           key={l.key}
           data-close
           onClick={() => setLayout(l.key)}
-          className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-white/8 ${
+          className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-ink/8 ${
             layout === l.key ? "text-fg" : "text-dim"
           }`}
         >
@@ -205,7 +205,7 @@ export function DisplayMenu() {
       <div className="mx-1.5 my-1 border-t border-line" />
       <div className={heading}>グリッドのタイルの下に表示</div>
       {INFO.map((i) => (
-        <label key={i.key} className="flex cursor-default items-center gap-2 rounded px-2 py-1.5 hover:bg-white/8">
+        <label key={i.key} className="flex cursor-default items-center gap-2 rounded px-2 py-1.5 hover:bg-ink/8">
           <input
             type="checkbox"
             checked={showInfo[i.key]}
