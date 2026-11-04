@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs><linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f6f1e6"/><stop offset="1" stop-color="#e6ddca"/></linearGradient></defs>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#bg)"/>
+  <text x="512" y="690" text-anchor="middle" font-family="Caladea, Liberation Serif, serif" font-size="470" fill="#1d1e22" letter-spacing="-10">Aa</text>
+  <rect x="230" y="760" width="564" height="14" rx="7" fill="#d2523a"/>
+</svg>
