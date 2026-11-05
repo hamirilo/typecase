@@ -209,6 +209,8 @@ export interface Filter {
   /** Variable fonts with any of these axes / fonts of families this size. */
   fontAxes: string[];
   fontStyles: string[];
+  /** Fonts that map every one of these characters ("" = no restriction; spaces don't count). */
+  fontChars: string;
   exts: string[];
   /** ms; after inclusive, before exclusive. */
   importedAfter: number | null;
@@ -225,6 +227,7 @@ export const EMPTY_FILTER: Filter = {
   fontFeatures: [],
   fontAxes: [],
   fontStyles: [],
+  fontChars: "",
   exts: [],
   importedAfter: null,
   importedBefore: null,

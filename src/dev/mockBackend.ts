@@ -122,6 +122,17 @@ let tagSeq = 0;
 let uid = 0;
 const id = () => `m${(++uid).toString(36)}`;
 
+/** A few characters some mock fonts lack (the real app reads each font's cmap, db.rs `covers`). */
+const LACKING: Record<string, string> = { "Yuji-Syuku.ttf": "鬱", "keifont.ttf": "鬱薔薇驚" };
+function mockCovers(i: MockItem, ch: string): boolean {
+  const c = ch.codePointAt(0)!;
+  if ((LACKING[i.fileName] ?? "").includes(ch)) return false;
+  if (c < 0x250) return true;
+  if (c >= 0x4e00 && c <= 0x9fff) return ["ja", "zh", "ko"].includes(i.fontScript ?? "");
+  if ((c >= 0x3000 && c <= 0x30ff) || (c >= 0xff00 && c <= 0xffef)) return i.fontScript === "ja";
+  return false;
+}
+
 /** Axes of the mock's variable fonts. */
 const AXES_OF: Record<string, string[]> = {
   "Inter[wght].woff2": ["wght", "opsz"],
@@ -277,6 +288,7 @@ function applyRule(r: MockItem[], rule: Rule): MockItem[] {
     r = r.filter((i) => f.fontCategories.includes(i.fontCategoryUser ?? i.fontCategory ?? "none"));
   if (f.fontWeights?.length) r = r.filter((i) => f.fontWeights.some((k) => inWeight(i, k)));
   if (f.fontFeatures?.length) r = r.filter((i) => f.fontFeatures.some((k) => (i.fontFeatures ?? []).includes(k)));
+  if (f.fontChars?.trim()) r = r.filter((i) => [...f.fontChars].every((c) => !c.trim() || mockCovers(i, c)));
   if (f.fontAxes?.length) r = r.filter((i) => f.fontAxes.some((k) => (i.fontAxes ?? []).includes(k)));
   if (f.fontStyles?.length) r = r.filter((i) => f.fontStyles.some((k) => styleKeys(i).includes(k)));
   if (f.exts?.length) r = r.filter((i) => f.exts.map(ext).includes(ext(i.ext)));

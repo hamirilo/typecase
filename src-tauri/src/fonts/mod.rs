@@ -374,6 +374,9 @@ pub struct FontMeta {
     pub features: Vec<&'static str>,
     /// Variation axes of a variable font, in `AXES` order (empty when it isn't one): see `axes`.
     pub axes: Vec<&'static str>,
+    /// The characters the first face maps, as code point ranges (`coverage`); what the filter's
+    /// 収録文字 asks (`covers`). Empty when the font maps none.
+    pub coverage: Vec<u8>,
     /// PostScript name ("" when the font has none): what tells the same font
     /// in the library and installed on this computer (docs/SYSTEM_FONTS.md).
     pub ps_name: String,
@@ -424,6 +427,7 @@ pub fn meta(sfnt: &[u8]) -> Result<FontMeta, String> {
         category: category(&font),
         features: features(&font),
         axes: axes(&font),
+        coverage: coverage(&chars(&font)),
         ps_name: name(&font, &[StringId::POSTSCRIPT_NAME]),
     })
 }
@@ -703,6 +707,40 @@ fn is_color(font: &FontRef) -> bool {
     [b"COLR", b"SVG ", b"CBDT", b"sbix"].iter().any(|t| font.data_for_tag(Tag::new(t)).is_some())
 }
 
+/// Characters (code points, sorted and distinct) as ranges, each a pair of little-endian `u32`s
+/// (first, last): a few hundred bytes for most fonts, a few KB for Japanese ones.
+pub fn coverage(chars: &[u32]) -> Vec<u8> {
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < chars.len() {
+        let first = chars[i];
+        let mut last = first;
+        while i + 1 < chars.len() && chars[i + 1] == last + 1 {
+            i += 1;
+            last = chars[i];
+        }
+        out.extend_from_slice(&first.to_le_bytes());
+        out.extend_from_slice(&last.to_le_bytes());
+        i += 1;
+    }
+    out
+}
+
+/// Whether the font whose `coverage` this is maps every character of `text` (spaces and controls
+/// don't count; no characters at all = every font).
+pub fn covers(coverage: &[u8], text: &str) -> bool {
+    let ranges: Vec<(u32, u32)> = coverage
+        .chunks_exact(8)
+        .map(|c| (u32::from_le_bytes(c[..4].try_into().unwrap()), u32::from_le_bytes(c[4..].try_into().unwrap())))
+        .collect();
+    text.chars().filter(|c| !c.is_control() && !c.is_whitespace()).all(|c| {
+        let c = c as u32;
+        // The last range starting at or before `c` is the only one that can hold it.
+        let at = ranges.partition_point(|&(first, _)| first <= c);
+        at > 0 && ranges[at - 1].1 >= c
+    })
+}
+
 /// The variation axes of a variable font, in `AXES` order.
 fn axes(font: &FontRef) -> Vec<&'static str> {
     let tags: Vec<[u8; 4]> = font.axes().iter().map(|a| a.tag().to_be_bytes()).collect();
@@ -930,6 +968,27 @@ pub mod tests {
     }
 
     #[test]
+    fn coverage_is_ranges_of_the_characters() {
+        let chars: Vec<u32> = "ABC永東"
+            .chars()
+            .map(|c| c as u32)
+            .chain([0x20, 0x21])
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        let cov = coverage(&chars);
+        assert_eq!(cov.len() % 8, 0);
+        assert_eq!(cov.len() / 8, 4, "0x20-0x21, A-C, 永, 東 (永 and 東 aren't next to each other)");
+        assert!(covers(&cov, "AB永"));
+        assert!(covers(&cov, "  \n"), "spaces and controls don't count");
+        assert!(covers(&cov, ""), "nothing asked: every font");
+        assert!(!covers(&cov, "AD"), "D is just past the range");
+        assert!(!covers(&cov, "鬱"));
+        assert!(!covers(&[], "A"), "a font that maps nothing");
+        assert!(covers(&[], ""));
+    }
+
+    #[test]
     fn variable_font() {
         let Some(ttf) = system_font(VARIABLE) else { return };
         let face = &faces(&ttf).unwrap()[0];
@@ -944,6 +1003,10 @@ pub mod tests {
         let Some(plain) = system_font(SINGLE) else { return };
         assert!(faces(&plain).unwrap()[0].axes.is_empty());
         assert!(meta(&plain).unwrap().axes.is_empty());
+        // The coverage holds what the font maps, and nothing else.
+        let cov = meta(&plain).unwrap().coverage;
+        assert!(covers(&cov, "Aa 0"), "Latin");
+        assert!(!covers(&cov, "A\u{10FFFD}"), "a private-use character it doesn't map");
     }
 
     #[test]

@@ -17,6 +17,7 @@ fn meta(ps: &str) -> crate::fonts::FontMeta {
         category: None,
         features: vec![],
         axes: vec![],
+        coverage: vec![],
         ps_name: ps.into(),
     }
 }
@@ -499,6 +500,37 @@ fn find_or_create_reuses() {
     let child = find_or_create_folder(&conn, Some(&a), "Sans").unwrap();
     assert_ne!(child, a, "same name under a different parent is a different folder");
     assert_eq!(find_or_create_folder(&conn, Some(&a), "Sans").unwrap(), child);
+}
+
+/// 収録文字 in the filter row: fonts that map every character asked for.
+#[test]
+fn chars_filter() {
+    let mut conn = mem();
+    for (id, at) in [("a", 1), ("b", 2), ("c", 3)] {
+        add(&mut conn, id, &format!("{id}.ttf"), at);
+    }
+    let cov = |s: &str| crate::fonts::coverage(&s.chars().map(|c| c as u32).collect::<std::collections::BTreeSet<_>>().into_iter().collect::<Vec<_>>());
+    conn.execute("UPDATE items SET font_chars = ?2 WHERE id = ?1", params!["a", cov("Aa永")]).unwrap();
+    conn.execute("UPDATE items SET font_chars = ?2 WHERE id = ?1", params!["b", cov("Aa")]).unwrap();
+    // "c" was filed before the characters were kept (NULL): it holds none, and is read again.
+    conn.execute("UPDATE items SET font_chars = NULL WHERE id = 'c'", []).unwrap();
+    let find = |conn: &Connection, text: &str| {
+        let mut query = q(View::All);
+        query.filter.font_chars = text.into();
+        ids(query_items(conn, &query).unwrap())
+    };
+    assert_eq!(find(&conn, "永"), s(&["a"]));
+    assert_eq!(find(&conn, "Aa"), s(&["a", "b"]));
+    assert_eq!(find(&conn, " 永 A "), s(&["a"]), "spaces don't count");
+    assert!(find(&conn, "鬱").is_empty());
+    assert_eq!(find(&conn, "").len(), 3, "no characters: no restriction");
+    assert_eq!(find(&conn, "   ").len(), 3);
+    assert_eq!(missing_font_meta(&conn).unwrap().iter().map(|m| m.0.as_str()).collect::<Vec<_>>(), vec!["c"]);
+    let mut m = meta("ps-c");
+    m.coverage = cov("Aa鬱");
+    set_font_meta(&mut conn, &[("c".to_string(), m)]).unwrap();
+    assert!(missing_font_meta(&conn).unwrap().is_empty());
+    assert_eq!(find(&conn, "鬱"), s(&["c"]));
 }
 
 /// 軸 and スタイル数 in the filter row: axes of variable fonts, and the size of a font's family.

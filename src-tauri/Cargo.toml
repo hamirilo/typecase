@@ -24,7 +24,7 @@ tauri = { version = "2", features = ["protocol-asset", "macos-private-api"] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-rusqlite = { version = "0.40.2", features = ["bundled"] }
+rusqlite = { version = "0.40.2", features = ["bundled", "functions"] }
 # The rendered sample (fonts/mod.rs `render_thumb`) as the thumbnail.
 image = { version = "0.25.10", default-features = false, features = ["png"] }
 sha2 = "0.11.0"

@@ -145,7 +145,7 @@ fn read_font(path: &Path, size: u64, modified: i64) -> Option<SystemFont> {
         return None;
     }
     let sfnt = to_sfnt(&std::fs::read(path).ok()?, &ext).ok()?;
-    let FontMeta { family, weight, weight_min, weight_max, script, category, features, axes, ps_name } = meta(&sfnt).ok()?;
+    let FontMeta { family, weight, weight_min, weight_max, script, category, features, axes, ps_name, .. } = meta(&sfnt).ok()?;
     let name = super::faces(&sfnt).ok()?.into_iter().next().map(|f| f.full_name).unwrap_or_default();
     let file_name = path.file_name()?.to_string_lossy().into_owned();
     Some(SystemFont {

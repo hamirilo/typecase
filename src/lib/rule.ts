@@ -72,6 +72,7 @@ export function describeRule(rule: Rule, tags: Tag[]): string[] {
   if (rule.minRating) out.push(`★${rule.minRating}以上`);
   if (f.fontScripts?.length) out.push(`言語: ${f.fontScripts.map(fontScriptLabel).join("・")}`);
   if (f.fontCategories?.length) out.push(`書体: ${f.fontCategories.map(fontCategoryLabel).join("・")}`);
+  if (f.fontChars?.trim()) out.push(`収録文字: ${[...new Set([...f.fontChars].filter((c) => c.trim()))].join("")}`);
   if (f.fontWeights?.length) out.push(`太さ: ${f.fontWeights.map(fontWeightLabel).join("・")}`);
   if (f.fontStyles?.length) out.push(`スタイル数: ${f.fontStyles.map(fontStyleLabel).join("・")}`);
   if (f.fontFeatures?.length) out.push(`特徴: ${f.fontFeatures.map(fontFeatureLabel).join("・")}`);

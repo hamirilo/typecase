@@ -29,7 +29,7 @@ import { systemFacetCounts } from "../features/fonts/system";
  * Conditions the fonts installed on this computer don't have (they have no
  * rating, tags or import date): greyed out there, with why (docs/SYSTEM_FONTS.md).
  */
-function useNotForSystem(what: string): { disabled?: boolean; title?: string } {
+export function useNotForSystem(what: string): { disabled?: boolean; title?: string } {
   const system = useStore((s) => s.view.kind === "system");
   return system ? { disabled: true, title: `この端末のフォントには${what}がありません（ライブラリのフォントだけ）` } : {};
 }

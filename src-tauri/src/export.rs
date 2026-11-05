@@ -271,6 +271,7 @@ mod tests {
                 category: None,
                 features: vec![],
                 axes: vec![],
+                coverage: vec![],
                 ps_name: String::new(),
             },
         };
