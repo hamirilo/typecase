@@ -23,16 +23,23 @@ const CONDITIONS: {
 
 export function FontConditions({ cond, locked, onLocked }: CondProps) {
   const setFilter = useStore((s) => s.setFilter);
+  const view = useStore((s) => s.view);
   return (
     <>
       {CONDITIONS.map((c) => {
         const picked = cond.filter[c.key];
+        // Opened as a place in the sidebar: the condition would only repeat it (docs/NAVIGATION.md).
+        const inPlace =
+          (c.key === "fontScripts" && view.kind === "fontScript") ||
+          (c.key === "fontCategories" && view.kind === "fontCategory");
         const labels = picked.map((k) => c.values.find((v) => v.key === k)?.label ?? k);
         return (
           <Pill
             key={c.key}
             label={c.label}
             value={labels.join("・")}
+            disabled={inPlace}
+            title={inPlace ? `サイドバーで「${c.label}」の場所を開いているので、ここでは絞り込めません` : undefined}
             locked={locked}
             onLocked={onLocked}
             onClear={() => setFilter(CLEARED[c.key].filter!)}

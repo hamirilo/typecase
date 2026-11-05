@@ -173,6 +173,7 @@ async function build(libraries: LibraryEntry[]): Promise<Menu> {
     cmd("list.importFolder"),
     sep(),
     cmd("folder.new"),
+    cmd("tag.new"),
     cmd("smart.new"),
     sep(),
     cmd("list.export"),

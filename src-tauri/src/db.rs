@@ -220,6 +220,10 @@ pub enum View {
     Smart { id: String },
     /// Items carrying a tag: the sidebar's tags are places like folders (docs/NAVIGATION.md).
     Tag { id: i64 },
+    /// Fonts of one writing system (`fonts::SCRIPTS`): a place in the sidebar (docs/NAVIGATION.md).
+    FontScript { id: String },
+    /// Fonts of one typeface style (`fonts::CATEGORIES`, or "none" = unknown): a place in the sidebar.
+    FontCategory { id: String },
 }
 
 /// Attribute filters (the filter row). Empty / None = no restriction.
@@ -509,6 +513,14 @@ fn query_where(conn: &Connection, q: &ItemQuery) -> DbResult<(Vec<String>, Vec<B
         View::Tag { id } => {
             wheres.push("EXISTS (SELECT 1 FROM item_tags t WHERE t.item_id = items.id AND t.tag_id = ?)".into());
             args.push(Box::new(*id));
+        }
+        View::FontScript { id } => {
+            wheres.push("items.font_script = ?".into());
+            args.push(Box::new(id.clone()));
+        }
+        View::FontCategory { id } => {
+            wheres.push(format!("{FONT_CATEGORY} = ?"));
+            args.push(Box::new(id.clone()));
         }
         View::All | View::Trash | View::Smart { .. } => {}
     }
@@ -1421,6 +1433,16 @@ pub fn set_color(conn: &Connection, target: ColorTarget, id: &dyn ToSql, color: 
 pub(crate) fn ensure_tag(conn: &Connection, name: &str) -> DbResult<i64> {
     conn.execute("INSERT OR IGNORE INTO tags (name) VALUES (?1)", [name])?;
     conn.query_row("SELECT id FROM tags WHERE name = ?1", [name], |r| r.get(0))
+}
+
+/// Makes the tag `name` (the sidebar's ＋): the existing one if the name is taken. Empty names make none.
+pub fn create_tag(conn: &Connection, name: &str) -> DbResult<Option<Tag>> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Ok(None);
+    }
+    let id = ensure_tag(conn, name)?;
+    list_tags(conn).map(|tags| tags.into_iter().find(|t| t.id == id))
 }
 
 /// Tags items by name (tags are made where missing).

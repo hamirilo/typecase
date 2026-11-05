@@ -293,6 +293,8 @@ function matched(q: ItemQuery): MockItem[] {
   if (v.kind === "pinned") r = r.filter((i) => i.pinnedAt !== null);
   if (v.kind === "tray") r = r.filter((i) => tray.has(i.id));
   if (v.kind === "tag") r = r.filter((i) => hasTag(i.id, v.id));
+  if (v.kind === "fontScript") r = r.filter((i) => i.fontScript === v.id);
+  if (v.kind === "fontCategory") r = r.filter((i) => (i.fontCategoryUser ?? i.fontCategory ?? "none") === v.id);
   if (v.kind === "folder") {
     const ids = q.includeSubfolders ? descendants(v.id) : [v.id];
     r = r.filter((i) => ids.some((f) => inFolder(i.id, f)));
@@ -676,6 +678,14 @@ function handle(cmd: string, a: any): unknown {
       return [...tags]
         .sort((x, y) => x.name.localeCompare(y.name))
         .map((t) => ({ ...t, count: live().filter((i) => hasTag(i.id, t.id)).length })) satisfies Tag[];
+    case "create_tag": {
+      const name = String(a.name).trim();
+      if (!name) return null;
+      const known = tags.find((x) => x.name.toLowerCase() === name.toLowerCase());
+      const t = known ?? { id: ++tagSeq, name, color: null };
+      if (!known) tags.push(t);
+      return { ...t, count: live().filter((i) => hasTag(i.id, t.id)).length } satisfies Tag;
+    }
     case "add_tags":
       addTags(a.ids, a.names);
       return;

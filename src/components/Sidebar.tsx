@@ -8,12 +8,16 @@ import {
   Images,
   Inbox,
   Keyboard,
+  Languages,
   Monitor,
   MoreHorizontal,
   Pin,
+  Plus,
+  SlidersHorizontal,
   Tag as TagIcon,
   Tags,
   Trash2,
+  Type as TypeIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
@@ -31,7 +35,8 @@ import {
   transferList,
   trayList,
 } from "../lib/actions";
-import { api, type Folder, type View } from "../lib/api";
+import { api, FONT_CATEGORIES, FONT_SCRIPTS, type Folder, type Tag, type View } from "../lib/api";
+import { SIDEBAR_ENTRIES } from "../lib/librarySettings";
 import {
   activeConditions,
   isHidden,
@@ -428,6 +433,18 @@ function FolderTree() {
     <Section
       title="フォルダ"
       hideId="section:folders"
+      forceOpen={editing !== null && folders.some((f) => f.id === editing)}
+      keep={(() => {
+        const open = view.kind === "folder" ? folders.find((f) => f.id === view.id) : undefined;
+        return open ? (
+          <Row
+            active
+            icon={<FolderIcon size={15} style={{ color: colorHex(open.color) }} fill={colorHex(open.color) ?? "none"} fillOpacity={0.3} />}
+            label={open.name}
+            count={open.count}
+          />
+        ) : null;
+      })()}
       menu={[
         { label: "フォルダを作成", hint: "⌘⇧N", onClick: () => create(null) },
         { label: "最上位のフォルダを名前順に並べ替え", onClick: () => sortFoldersByName(null) },
@@ -458,36 +475,67 @@ function FolderTree() {
 }
 
 /**
- * A titled block of the sidebar. With `hideId` it can be hidden from its
- * heading's menu (after `menu`), and renders nothing while hidden.
+ * A titled block of the sidebar. Its heading folds it (remembered per library);
+ * the heading's buttons (`action`, e.g. ＋) show while the pointer is over it.
+ * With `hideId` it can be hidden from the heading's menu (after `menu`), and
+ * renders nothing while hidden. Folded, it keeps showing `keep` (the open place),
+ * so you still see where you are; `forceOpen` unfolds it (a row is being made).
  */
 export function Section({
   title,
   action,
   hideId,
   menu = [],
+  keep,
+  forceOpen,
   children,
 }: {
   title: string;
   action?: React.ReactNode;
   hideId?: string;
   menu?: MenuItem[];
+  keep?: React.ReactNode;
+  forceOpen?: boolean;
   children: React.ReactNode;
 }) {
   const hidden = useStore((s) => hideId !== undefined && isHidden(s, hideId));
   const showMenu = useMenu((s) => s.show);
+  const root = useStore((s) => s.library?.root ?? "");
+  const id = hideId ?? title;
+  const [folded, setFolded] = useState(() => loadCollapsed(root).has(id));
+  useEffect(() => setFolded(loadCollapsed(root).has(id)), [root, id]);
   if (hidden) return null;
+  const toggle = () => {
+    const c = loadCollapsed(root);
+    if (c.has(id)) c.delete(id);
+    else c.add(id);
+    saveCollapsed(root, c);
+    setFolded(c.has(id));
+  };
   const items: MenuItem[] = hideId ? [...menu, ...(menu.length ? [{ separator: true } as const] : []), hideItem(hideId)] : menu;
+  const closed = folded && !forceOpen;
   return (
     <div className="mt-4">
       <div
         onContextMenu={items.length ? (e) => showMenu(e, items) : undefined}
-        className="mb-1 flex items-center justify-between px-2 text-xs font-semibold tracking-wide text-dim"
+        className="group/head mb-1 flex items-center px-2 text-xs font-semibold tracking-wide text-dim"
       >
-        <span>{title}</span>
-        {action}
+        <button
+          aria-expanded={!closed}
+          title={closed ? "開く" : "折りたたむ"}
+          onClick={toggle}
+          className="-ml-0.5 flex min-w-0 flex-1 items-center gap-0.5 rounded py-0.5 text-left hover:text-fg"
+        >
+          {closed ? <ChevronRight size={12} /> : <ChevronDown size={12} />}
+          <span className="truncate">{title}</span>
+        </button>
+        {action && (
+          <span className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover/head:opacity-100 focus-within:opacity-100">
+            {action}
+          </span>
+        )}
       </div>
-      {children}
+      {closed ? keep : children}
     </div>
   );
 }
@@ -507,6 +555,13 @@ function SmartFolderList() {
     <Section
       title="スマートフォルダ"
       hideId="section:smart"
+      forceOpen={editing !== null && smartFolders.some((f) => f.id === editing)}
+      keep={(() => {
+        const open = view.kind === "smart" ? smartFolders.find((f) => f.id === view.id) : undefined;
+        return open ? (
+          <Row active icon={<FolderSearch size={15} style={{ color: colorHex(open.color) }} />} label={open.name} count={open.count} />
+        ) : null;
+      })()}
       action={
         <button
           title={hasConditions ? "今の条件をスマートフォルダとして保存（⌘⇧⌥N）" : "スマートフォルダを作成（⌘⇧⌥N）"}
@@ -569,10 +624,41 @@ function TagList() {
   const run = useStore((s) => s.run);
   const showMenu = useMenu((s) => s.show);
   const [editing, setEditing] = useState<number | null>(null);
+  const adding = useStore((s) => s.creatingTag);
+  const setAdding = useStore((s) => s.setCreatingTag);
+
+  // The ＋ makes an empty tag, then opens it (tags are otherwise made by tagging fonts).
+  const create = async (name: string) => {
+    const made: { tag: Tag | null } = { tag: null };
+    const ok = await run(async () => {
+      made.tag = await api.createTag(name);
+    });
+    if (ok && made.tag) setView({ kind: "tag", id: made.tag.id });
+  };
 
   return (
-    <Section title="タグ" hideId="section:tags">
-      {tags.length === 0 && <p className="px-2 py-1 text-xs text-dim">タグはまだありません</p>}
+    <Section
+      title="タグ"
+      hideId="section:tags"
+      forceOpen={adding}
+      action={
+        <button title="タグを作成" aria-label="タグを作成" className="text-dim hover:text-fg" onClick={() => setAdding(true)}>
+          <Plus size={15} />
+        </button>
+      }
+      keep={(() => {
+        const open = view.kind === "tag" ? tags.find((t) => t.id === view.id) : undefined;
+        return open ? (
+          <Row
+            active
+            icon={<TagIcon size={14} style={{ color: colorHex(open.color) }} fill={colorHex(open.color) ?? "none"} fillOpacity={0.3} />}
+            label={open.name}
+            count={open.count}
+          />
+        ) : null;
+      })()}
+    >
+      {tags.length === 0 && !adding && <p className="px-2 py-1 text-xs text-dim">タグはまだありません</p>}
       {tags.map((t) => (
         <Row
           key={t.id}
@@ -607,7 +693,102 @@ function TagList() {
           }
         />
       ))}
+      {adding && (
+        <Row
+          icon={<TagIcon size={14} />}
+          label={
+            <InlineEdit
+              value=""
+              onDone={(v) => {
+                setAdding(false);
+                if (v && v.trim()) create(v.trim());
+              }}
+            />
+          }
+        />
+      )}
     </Section>
+  );
+}
+
+/**
+ * The writing systems and typeface styles of the library's fonts, opened as
+ * places (docs/NAVIGATION.md). Only the ones that have fonts are listed.
+ */
+function FontPlaces({
+  title,
+  hideId,
+  kind,
+  values,
+  counts,
+  icon,
+}: {
+  title: string;
+  hideId: string;
+  kind: "fontScript" | "fontCategory";
+  values: { key: string; label: string }[];
+  counts: Record<string, number>;
+  icon: React.ReactNode;
+}) {
+  const view = useStore((s) => s.view);
+  const setView = useStore((s) => s.setView);
+  const rows = values
+    .map((v) => ({ ...v, active: view.kind === kind && view.id === v.key, count: counts[v.key] ?? 0 }))
+    .filter((v) => v.count > 0 || v.active)
+    .map((v) => ({
+      active: v.active,
+      node: (
+        <Row
+          key={v.key}
+          active={v.active}
+          icon={icon}
+          label={v.label}
+          count={v.count}
+          onClick={() => setView({ kind, id: v.key } as View)}
+        />
+      ),
+    }));
+  return (
+    <Section title={title} hideId={hideId} keep={rows.filter((r) => r.active).map((r) => r.node)}>
+      {rows.length === 0 && <p className="px-2 py-1 text-xs text-dim">フォントを取り込むとここに出ます</p>}
+      {rows.map((r) => r.node)}
+    </Section>
+  );
+}
+
+/**
+ * The top heading of the sidebar, "場所". Its menu (shown on hover) lists every
+ * entry that can be hidden, checked while shown: the way back for hidden ones
+ * (the same setting as 設定 → サイドバー, docs/SETTINGS.md).
+ */
+function PlacesHeading() {
+  const showMenu = useMenu((s) => s.show);
+  const hidden = useStore(useShallow((s) => sidebarHidden(s)));
+  const scope = useStore((s) => sidebarScope(s));
+  const setHidden = useStore((s) => s.setSidebarHidden);
+  const open = (e: React.MouseEvent) =>
+    showMenu(e, [
+      { header: scope === "app" ? "表示するもの（すべてのライブラリ）" : "表示するもの（このライブラリだけ）" },
+      ...SIDEBAR_ENTRIES.map((en) => ({
+        label: en.label,
+        checked: !hidden.includes(en.id),
+        onClick: () => setHidden(hidden.includes(en.id) ? hidden.filter((x) => x !== en.id) : [...hidden, en.id], scope),
+      })),
+    ]);
+  return (
+    <div className="group/head mb-1 flex items-center px-2 text-xs font-semibold tracking-wide text-dim">
+      <span className="flex-1 pl-3">場所</span>
+      <span className="opacity-0 transition-opacity group-hover/head:opacity-100 focus-within:opacity-100">
+        <button
+          title="表示するもの"
+          aria-label="サイドバーに表示するものを選ぶ"
+          onClick={open}
+          className="flex h-5 w-6 items-center justify-center rounded hover:bg-ink/10 hover:text-fg"
+        >
+          <SlidersHorizontal size={14} />
+        </button>
+      </span>
+    </div>
   );
 }
 
@@ -690,10 +871,27 @@ export function Sidebar() {
       {/* The library is switched seldom: at the bottom. */}
       <div className="h-2 shrink-0" />
       <nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
+        <PlacesHeading />
         {shown(looks).map(row)}
         {shown(marks).length > 0 && <div className="h-2" />}
         {shown(marks).map(row)}
         <div className="mt-2">{shown(tidying).map(row)}</div>
+        <FontPlaces
+          title="言語"
+          hideId="section:scripts"
+          kind="fontScript"
+          values={FONT_SCRIPTS}
+          counts={counts.fontScripts}
+          icon={<Languages size={15} />}
+        />
+        <FontPlaces
+          title="書体"
+          hideId="section:categories"
+          kind="fontCategory"
+          values={FONT_CATEGORIES}
+          counts={counts.fontCategories}
+          icon={<TypeIcon size={15} />}
+        />
         <FolderTree />
         <SmartFolderList />
         <TagList />

@@ -500,6 +500,44 @@ fn find_or_create_reuses() {
     assert_eq!(find_or_create_folder(&conn, Some(&a), "Sans").unwrap(), child);
 }
 
+/// A writing system or a typeface style opened as a place (the sidebar's 言語 / 書体).
+#[test]
+fn font_places() {
+    let mut conn = mem();
+    for (id, at) in [("a", 1), ("b", 2), ("c", 3)] {
+        add(&mut conn, id, &format!("{id}.ttf"), at);
+    }
+    conn.execute("UPDATE items SET font_script = 'ja', font_category = 'mincho' WHERE id = 'a'", []).unwrap();
+    conn.execute("UPDATE items SET font_script = 'latin', font_category = 'gothic' WHERE id = 'b'", []).unwrap();
+    conn.execute("UPDATE items SET font_script = 'latin' WHERE id = 'c'", []).unwrap();
+    let open = |view: View| ids(query_items(&conn, &q(view)).unwrap());
+    assert_eq!(open(View::FontScript { id: "ja".into() }), s(&["a"]));
+    assert_eq!(open(View::FontScript { id: "latin".into() }), s(&["b", "c"]));
+    assert_eq!(open(View::FontCategory { id: "gothic".into() }), s(&["b"]));
+    assert_eq!(open(View::FontCategory { id: "none".into() }), s(&["c"]), "style unknown");
+    // The user's style wins over the guess, as in the filter.
+    set_font_category(&conn, &s(&["a"]), Some("gothic")).unwrap();
+    assert_eq!(open(View::FontCategory { id: "gothic".into() }), s(&["a", "b"]));
+    // A place and a condition together: all of them.
+    let mut query = q(View::FontScript { id: "latin".into() });
+    query.filter.font_categories = vec!["gothic".into()];
+    assert_eq!(ids(query_items(&conn, &query).unwrap()), s(&["b"]));
+}
+
+/// The sidebar's ＋ on 「タグ」: an empty tag, listed with a count of 0.
+#[test]
+fn create_tag_makes_an_empty_tag() {
+    let mut conn = mem();
+    let t = create_tag(&conn, "  案件A ").unwrap().unwrap();
+    assert_eq!((t.name.as_str(), t.count), ("案件A", 0));
+    assert_eq!(list_tags(&conn).unwrap().len(), 1);
+    assert_eq!(create_tag(&conn, "案件A").unwrap().unwrap().id, t.id, "same name: the same tag");
+    assert!(create_tag(&conn, "   ").unwrap().is_none());
+    add(&mut conn, "a", "a.ttf", 1);
+    add_tags(&mut conn, &s(&["a"]), &s(&["案件A"])).unwrap();
+    assert_eq!(list_tags(&conn).unwrap()[0].count, 1);
+}
+
 #[test]
 fn attribute_filters() {
     let mut conn = mem();

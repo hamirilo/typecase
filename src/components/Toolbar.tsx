@@ -19,7 +19,7 @@ import { dragRegion } from "../lib/titleBar";
 import { emptyTrash } from "../lib/actions";
 import { SpecimenControls } from "../features/fonts/SpecimenControls";
 import { reloadSystemFonts } from "../features/fonts/system";
-import { type Folder, type SmartFolder, type SortKey, type Tag, type View } from "../lib/api";
+import { fontCategoryLabel, fontScriptLabel, type Folder, type SmartFolder, type SortKey, type Tag, type View } from "../lib/api";
 import { colorHex } from "../lib/colors";
 import { activeConditions, placeTotal, useStore } from "../store";
 import { composing } from "../lib/ime";
@@ -70,6 +70,10 @@ function viewTitle(view: View, folders: Folder[], smart: SmartFolder[], tags: Ta
       return smart.find((f) => f.id === view.id)?.name ?? "";
     case "tag":
       return tags.find((t) => t.id === view.id)?.name ?? "";
+    case "fontScript":
+      return fontScriptLabel(view.id);
+    case "fontCategory":
+      return fontCategoryLabel(view.id);
     case "system":
       return "この端末のフォント";
   }

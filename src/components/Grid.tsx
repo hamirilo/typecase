@@ -595,7 +595,7 @@ function Empty({ kind, filtering }: { kind: string; filtering: boolean }) {
           : "この端末のフォントは見つかりませんでした"}
       </p>
     );
-  if (kind === "unfiled" || kind === "untagged")
+  if (kind === "unfiled" || kind === "untagged" || kind === "fontScript" || kind === "fontCategory")
     return <p className="mt-24 text-center text-dim">該当するフォントはありません</p>;
   if (kind === "favorites")
     return (

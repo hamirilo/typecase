@@ -168,6 +168,9 @@ export type View =
   | { kind: "smart"; id: string }
   /** Items carrying a tag: the sidebar's tags are places like folders (docs/NAVIGATION.md). */
   | { kind: "tag"; id: number }
+  /** Fonts of one writing system / typeface style (FONT_SCRIPTS / FONT_CATEGORIES keys): places in the sidebar. */
+  | { kind: "fontScript"; id: string }
+  | { kind: "fontCategory"; id: string }
   /**
    * The fonts installed on this computer, read only and not in the library
    * (docs/SYSTEM_FONTS.md). Never sent to Rust: features/fonts/system.ts lists them.
@@ -391,6 +394,8 @@ export const api = {
     invoke<void>("remove_from_folder", { ids, folderId }),
 
   listTags: () => invoke<Tag[]>("list_tags"),
+  /** An empty tag (the sidebar's ＋); the existing one when the name is taken, null for an empty name. */
+  createTag: (name: string) => invoke<Tag | null>("create_tag", { name }),
   /** Tags are made where missing. */
   addTags: (ids: string[], names: string[]) => invoke<void>("add_tags", { ids, names }),
   removeTag: (ids: string[], tagId: number) => invoke<void>("remove_tag", { ids, tagId }),
