@@ -8,6 +8,7 @@
  * The first key is the one menus show.
  */
 import { Copy, FolderInput, Heart, Layers, Pin, Plus, Trash2, type LucideIcon } from "lucide-react";
+import { otherTheme } from "./appearance";
 import {
   copySelection,
   copyTags,
@@ -144,6 +145,14 @@ const ALL_COMMANDS: Command[] = [
   },
 
   // --------------------------------------------------------------- view
+  {
+    id: "view.appearance",
+    // Quick switch between light and dark (the toolbar button too); "system" is chosen in settings.
+    title: "ライト／ダークを切り替え",
+    label: () => (otherTheme() === "light" ? "ライトにする" : "ダークにする"),
+    keys: ["Mod+Shift+D"],
+    run: (s) => s.saveAppSettings({ appearance: otherTheme() }),
+  },
   {
     id: "view.sidebar",
     title: "サイドバー",
