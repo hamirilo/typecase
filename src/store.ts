@@ -26,6 +26,7 @@ import {
   type LibrarySettings,
   type SidebarHidden,
 } from "./lib/librarySettings";
+import { applyAppearance, parseAppearance } from "./lib/appearance";
 import { groupItems, rowIds, type GroupBy, type Section } from "./lib/grouping";
 import { warn } from "./lib/log";
 import { MAX_OWN_PATTERNS } from "./features/fonts/patterns";
@@ -783,7 +784,9 @@ export const useStore = create<State>((set, get) => ({
   loadAppSettings: async () => {
     try {
       const app = await api.getAppSettings();
-      set({ appSettings: { ...app, sidebarHidden: parseSidebarHidden(app.sidebarHidden) } });
+      const appearance = parseAppearance(app.appearance);
+      set({ appSettings: { ...app, appearance, sidebarHidden: parseSidebarHidden(app.sidebarHidden) } });
+      applyAppearance(appearance);
       leaveHidden();
     } catch (e) {
       get().toast(String(e), true);
@@ -794,6 +797,7 @@ export const useStore = create<State>((set, get) => ({
     if (!app) return;
     const next = { ...app, ...patch };
     set({ appSettings: next });
+    if (patch.appearance) applyAppearance(patch.appearance);
     api.setAppSettings(next).catch((e) => get().toast(String(e), true));
   },
   setView: (view) => {

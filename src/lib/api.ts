@@ -45,6 +45,8 @@ export interface AppSettings {
   /** At launch: open the last library, or show the list to choose from. */
   startup: "last" | "choose";
   autoUpdate: boolean;
+  /** ライト／ダーク: follow the OS, or the user's choice (lib/appearance.ts). */
+  appearance: "system" | "light" | "dark";
   /** Sidebar entries hidden, for libraries that follow the app's sidebar. */
   sidebarHidden: string[];
 }

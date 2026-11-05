@@ -422,7 +422,7 @@ const mockLibraries = [
 
 // library.db `settings` (JSON by key) and settings.json's app settings.
 const librarySettings: Record<string, unknown> = {};
-const appSettings = { startup: "last", autoUpdate: true, sidebarHidden: [] as string[] };
+const appSettings = { startup: "last", autoUpdate: true, appearance: "system", sidebarHidden: [] as string[] };
 
 // The menu bar (src/lib/menuBar.ts): items by resource id, and the menu set
 // as the app menu, for checking its structure in the browser

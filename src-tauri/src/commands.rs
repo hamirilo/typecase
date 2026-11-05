@@ -50,6 +50,8 @@ pub struct AppSettings {
     startup: Startup,
     /// Look for a new version a few seconds after launch.
     auto_update: bool,
+    /// ライト／ダーク: follow the OS, or the user's choice.
+    appearance: Appearance,
     /// Sidebar entries hidden, for the libraries that follow the app's
     /// sidebar (library.db `sidebar` is not "own"). Read by the frontend.
     sidebar_hidden: Vec<String>,
@@ -57,8 +59,21 @@ pub struct AppSettings {
 
 impl Default for AppSettings {
     fn default() -> Self {
-        Self { startup: Startup::Last, auto_update: true, sidebar_hidden: Default::default() }
+        Self {
+            startup: Startup::Last,
+            auto_update: true,
+            appearance: Appearance::System,
+            sidebar_hidden: Default::default(),
+        }
     }
+}
+
+#[derive(Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+enum Appearance {
+    System,
+    Light,
+    Dark,
 }
 
 #[derive(Clone, Copy, PartialEq, Serialize, Deserialize)]
