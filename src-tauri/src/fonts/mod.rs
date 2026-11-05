@@ -967,6 +967,60 @@ pub mod tests {
         assert!(p.sample.chars().filter(|c| !c.is_whitespace()).count() >= 3);
     }
 
+    /// Colour fonts are told by their tables (skipped where no such font is installed).
+    #[test]
+    fn color_font_is_a_feature() {
+        let Some(emoji) = system_font(&[
+            "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",
+            "/System/Library/Fonts/Apple Color Emoji.ttc",
+            "C:\\Windows\\Fonts\\seguiemj.ttf",
+        ]) else {
+            return;
+        };
+        let Ok(m) = meta(&emoji) else { return };
+        assert!(m.features.contains(&"color"), "features: {:?}", m.features);
+        let Some(plain) = system_font(SINGLE) else { return };
+        assert!(!meta(&plain).unwrap().features.contains(&"color"));
+    }
+
+    /// Reads every font under the usual folders and prints how long it took and what it found:
+    /// `cargo test --lib scan_installed_fonts -- --ignored --nocapture` (not part of the normal run).
+    #[test]
+    #[ignore]
+    fn scan_installed_fonts() {
+        let dirs = ["/usr/share/fonts", "/System/Library/Fonts", "/Library/Fonts", "C:\\Windows\\Fonts"];
+        let mut files = Vec::new();
+        let mut stack: Vec<std::path::PathBuf> = dirs.iter().map(Into::into).collect();
+        while let Some(d) = stack.pop() {
+            let Ok(rd) = std::fs::read_dir(&d) else { continue };
+            for e in rd.flatten() {
+                let p = e.path();
+                if p.is_dir() {
+                    stack.push(p);
+                } else if matches!(p.extension().and_then(|x| x.to_str()), Some("ttf" | "otf" | "ttc")) {
+                    files.push(p);
+                }
+            }
+        }
+        let start = std::time::Instant::now();
+        let (mut read, mut color, mut variable, mut bytes, mut biggest) = (0, 0, 0, 0usize, 0usize);
+        for f in &files {
+            let Ok(data) = std::fs::read(f) else { continue };
+            let Ok(m) = meta(&data) else { continue };
+            read += 1;
+            color += m.features.contains(&"color") as usize;
+            variable += !m.axes.is_empty() as usize;
+            bytes += m.coverage.len();
+            biggest = biggest.max(m.coverage.len());
+        }
+        println!(
+            "{read}/{} fonts read in {:?}: {color} colour, {variable} variable; coverage {bytes} bytes in all, {} on average, {biggest} at most",
+            files.len(),
+            start.elapsed(),
+            bytes / read.max(1)
+        );
+    }
+
     #[test]
     fn coverage_is_ranges_of_the_characters() {
         let chars: Vec<u32> = "ABC永東"
