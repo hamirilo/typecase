@@ -164,7 +164,7 @@ function Dialog({ source, title }: { source: ListSource; title: string }) {
     >
       {isFolder && hasSubfolders && (
         <div>
-          {check(subfolders, setSubfolders, "サブフォルダを含める", "中のフォルダにある項目も書き出します")}
+          {check(subfolders, setSubfolders, "サブフォルダを含める", "中のフォルダにあるフォントも書き出します")}
           {check(
             structure,
             setStructure,
@@ -208,7 +208,7 @@ function LibraryDialog({ title }: { title: string }) {
       <DestField
         dest={dest}
         setDest={setDest}
-        note={`「${name}」フォルダを作り、フォルダ構成どおりに書き出します（同じ名前があれば「${name} (2)」）。ゴミ箱の項目は含めません`}
+        note={`「${name}」フォルダを作り、フォルダ構成どおりに書き出します（同じ名前があれば「${name} (2)」）。ゴミ箱のフォントは含めません`}
       />
     </Frame>
   );

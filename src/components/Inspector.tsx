@@ -1,5 +1,4 @@
 import { colorHex } from "../lib/colors";
-import { convertFileSrc } from "@tauri-apps/api/core";
 import {
   ChevronDown,
   ChevronRight,
@@ -20,6 +19,7 @@ import {
 } from "../lib/actions";
 import { api, formatBytes, isSystemId, type Folder, type Item, type SelectionInfo, type Tag } from "../lib/api";
 import { FontCategorySelect, FontDetails } from "../features/fonts/FontDetails";
+import { FontSpecimenCard, FontTitle } from "../features/fonts/FontHeader";
 import { SystemFontPanel } from "../features/fonts/SystemFontPanel";
 import { useStore } from "../store";
 import { composing } from "../lib/ime";
@@ -471,30 +471,24 @@ export function Inspector() {
         ? folderPath(folders, info.folders[0].id)
         : `${info.folders.length} フォルダ`
   }`;
-  const facts = single ? [single.fontFamily, `${single.ext.toUpperCase()} · ${formatBytes(single.size)}`].filter(Boolean) : [];
+  const facts = single ? [`${single.ext.toUpperCase()} · ${formatBytes(single.size)}`].filter(Boolean) : [];
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4">
       {single ? (
         <>
-          <div className="flex aspect-square items-center justify-center overflow-hidden rounded-lg bg-raised">
-            <img
-              src={convertFileSrc(single.thumbPath)}
-              className="max-h-full max-w-full object-contain"
-              draggable={false}
-              alt=""
-              onDoubleClick={() =>
-                useStore.getState().openViewer(items.findIndex((i) => i.id === single.id))
-              }
-            />
-          </div>
+          <FontSpecimenCard
+            item={single}
+            onOpen={() => useStore.getState().openViewer(items.findIndex((i) => i.id === single.id))}
+          />
+          <FontTitle item={single} />
           <SavedText
             key={single.id + ":name"}
             id="inspector-name"
             wrap
             value={single.name}
             onSave={(v) => run(() => api.renameItem(single.id, v))}
-            className="mt-3 w-full rounded-md border border-transparent bg-transparent px-1 py-0.5 text-sm font-semibold outline-none hover:border-line focus:border-accent"
+            className="mt-0.5 w-full rounded-md border border-transparent bg-transparent px-1 py-0.5 text-xs text-dim outline-none hover:border-line focus:border-accent"
           />
           <div className="px-1 text-xs text-dim tabular-nums">{facts.join(" · ")}</div>
         </>
@@ -596,13 +590,13 @@ export function Inspector() {
         {single && (
           <Section
             id="file"
-            title="ファイル情報"
+            title="フォント情報"
             summary={new Date(single.importedAt).toLocaleDateString("ja-JP")}
             // A font's details (family, weight …) are what it is: open until the user closes them.
             defaultOpen
           >
             <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
-              <dt className="text-dim">形式</dt>
+              <dt className="text-dim">ファイル</dt>
               <dd>
                 {single.ext.toUpperCase()} · {formatBytes(single.size)}
               </dd>

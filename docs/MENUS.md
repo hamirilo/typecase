@@ -92,7 +92,7 @@ interface Command {
   検索                          ⌘F
   絞り込みへ                    ⌘⇧F
 
-項目
+フォント
   表示                          Space
   ─
   お気に入り                    F       ✓ 付き
