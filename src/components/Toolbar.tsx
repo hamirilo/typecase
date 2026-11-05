@@ -4,6 +4,7 @@ import {
   ArrowUpNarrowWide,
   ChevronDown,
   FolderSearch,
+  Monitor,
   Moon,
   PanelLeftClose,
   PanelLeftOpen,
@@ -24,7 +25,7 @@ import { reloadSystemFonts } from "../features/fonts/system";
 import { fontCategoryLabel, fontScriptLabel, type Folder, type SmartFolder, type SortKey, type Tag, type View } from "../lib/api";
 import { colorHex } from "../lib/colors";
 import { command } from "../lib/commands";
-import { useShownTheme } from "../lib/appearance";
+import { appearanceLabel, nextAppearance, parseAppearance } from "../lib/appearance";
 import { activeConditions, placeTotal, useStore } from "../store";
 import { composing } from "../lib/ime";
 import { FilterRow } from "./FilterRow";
@@ -340,18 +341,18 @@ function DisplayControls() {
   );
 }
 
-/** Light / dark in one click (docs/UI.md「色」). Shows where a click goes; sits left of the details-panel toggle. */
+/** Appearance in one click (docs/UI.md「色」): システム → ライト → ダーク. The icon is the current choice. */
 function ThemeToggle({ className }: { className: string }) {
-  const shown = useShownTheme();
-  const toLight = shown === "dark";
+  const current = parseAppearance(useStore((s) => s.appSettings?.appearance));
+  const next = nextAppearance(current);
   return (
     <button
-      title={`${toLight ? "ライト" : "ダーク"}にする（⌘/Ctrl+Shift+D）`}
-      aria-label={toLight ? "ライトにする" : "ダークにする"}
+      title={`外観：${appearanceLabel(current)}（クリックで「${appearanceLabel(next)}」。⌘/Ctrl+Shift+D）`}
+      aria-label={`外観を${appearanceLabel(next)}にする`}
       onClick={() => command("view.appearance").run(useStore.getState())}
       className={`h-8 w-8 shrink-0 items-center justify-center rounded-md ghost ${className}`}
     >
-      {toLight ? <Sun size={15} /> : <Moon size={15} />}
+      {current === "system" ? <Monitor size={15} /> : current === "light" ? <Sun size={15} /> : <Moon size={15} />}
     </button>
   );
 }
