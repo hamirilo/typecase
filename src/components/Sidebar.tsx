@@ -598,7 +598,7 @@ function TagList() {
             showMenu(e, [
               { label: "名前を変更", onClick: () => setEditing(t.id) },
               { separator: true },
-              ...contentsMenu({ kind: "tag", id: t.id }, "このタグの項目"),
+              ...contentsMenu({ kind: "tag", id: t.id }, "このタグのフォント"),
               { separator: true },
               { colors: { current: t.color, onPick: (c) => run(() => api.setTagColor(t.id, c)) } },
               { separator: true },

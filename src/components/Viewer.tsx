@@ -140,8 +140,10 @@ export function Viewer() {
           // as on the toolbar (48px tall).
           style={{ paddingLeft: "max(1rem, var(--traffic-lights))", minHeight: "calc(var(--titlebar) + 8px)" }}
         >
-          <span className="min-w-0 flex-1 truncate">{item.name}</span>
-          {item.fontFamily && <span className="text-xs text-white/40">{item.fontFamily}</span>}
+          <span className="min-w-0 flex-1 truncate">
+            {item.fontFamily ?? item.name}
+            {item.fontFamily && <span className="ml-2 text-xs text-white/40">{item.name}</span>}
+          </span>
           <span className="tabular-nums text-white/50">
             {index + 1} / {items.length}
           </span>
