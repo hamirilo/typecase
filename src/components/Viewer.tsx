@@ -131,7 +131,7 @@ export function Viewer() {
   const toggle = (on: boolean) => `${tool} ${on ? "bg-white/10 text-accent hover:text-accent" : ""}`;
 
   return (
-    <div className={`fixed inset-0 z-40 flex animate-fade-in flex-col ${bare ? "bg-black" : "bg-black/95"}`}>
+    <div className={`fixed inset-0 z-40 keep-dark flex animate-fade-in flex-col bg-black`}>
       {!bare && (
         <div
           {...dragRegion(true)}

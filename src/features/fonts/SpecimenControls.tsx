@@ -29,7 +29,7 @@ export function SpecimenControls() {
   const own = useStore(useShallow((s) => s.librarySettings.patterns));
   const size = useSize();
   const zoom = (id: "view.zoomIn" | "view.zoomOut") => command(id).run(useStore.getState());
-  const step = "flex h-6 w-5 shrink-0 items-center justify-center rounded text-dim hover:bg-white/8 hover:text-fg";
+  const step = "flex h-6 w-5 shrink-0 items-center justify-center rounded text-dim hover:bg-ink/8 hover:text-fg";
   const name = patternName(text, own);
 
   return (
@@ -110,7 +110,7 @@ function PatternMenu({ name, text, own }: { name: string; text: string; own: str
   const row = (p: Pattern, key: string, onRemove?: () => void) => (
     <div
       key={key}
-      className={`group flex w-full items-center gap-2 rounded px-2 py-1 hover:bg-white/8 ${p.text === text ? "text-fg" : "text-fg/85"}`}
+      className={`group flex w-full items-center gap-2 rounded px-2 py-1 hover:bg-ink/8 ${p.text === text ? "text-fg" : "text-fg/85"}`}
     >
       <button onClick={() => pick(p.text)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
         <Check size={12} className={`shrink-0 text-accent ${p.text === text ? "" : "invisible"}`} />
@@ -122,7 +122,7 @@ function PatternMenu({ name, text, own }: { name: string; text: string; own: str
         <button
           title="このパターンを消す"
           onClick={onRemove}
-          className="shrink-0 rounded p-0.5 text-dim opacity-0 group-hover:opacity-100 hover:bg-white/10 hover:text-fg"
+          className="shrink-0 rounded p-0.5 text-dim opacity-0 group-hover:opacity-100 hover:bg-ink/10 hover:text-fg"
         >
           <X size={12} />
         </button>
@@ -176,7 +176,7 @@ function PatternMenu({ name, text, own }: { name: string; text: string; own: str
             </div>
           ))}
           <div className="mx-1.5 my-1 border-t border-line" />
-          <label className="flex cursor-default items-center gap-2 rounded px-2 py-1.5 hover:bg-white/8">
+          <label className="flex cursor-default items-center gap-2 rounded px-2 py-1.5 hover:bg-ink/8">
             <input
               type="checkbox"
               checked={fallback}

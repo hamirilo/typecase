@@ -140,8 +140,8 @@ export function Row({
         over
           ? "scale-[1.03] bg-accent-fill text-white shadow-lg shadow-accent/30"
           : active
-            ? "bg-accent/25 text-white"
-            : "hover:bg-white/5"
+            ? "bg-accent/25 text-fg"
+            : "hover:bg-ink/5"
       }`}
       style={{ paddingLeft: 8 + depth * 14 }}
     >
@@ -177,7 +177,7 @@ export function Row({
         <button
           title="メニュー"
           aria-label="メニュー"
-          className="-mr-1 hidden h-5 w-5 shrink-0 items-center justify-center rounded text-dim group-hover:flex hover:bg-white/10 hover:text-fg"
+          className="-mr-1 hidden h-5 w-5 shrink-0 items-center justify-center rounded text-dim group-hover:flex hover:bg-ink/10 hover:text-fg"
           onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation();
@@ -700,7 +700,7 @@ export function Sidebar() {
       </nav>
       <button
         onClick={() => useShortcutHelp.getState().setOpen(true)}
-        className="flex shrink-0 items-center gap-2 border-t border-line px-4 py-2 text-xs text-dim hover:bg-white/5 hover:text-fg"
+        className="flex shrink-0 items-center gap-2 border-t border-line px-4 py-2 text-xs text-dim hover:bg-ink/5 hover:text-fg"
       >
         <Keyboard size={14} />
         ショートカット一覧

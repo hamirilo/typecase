@@ -81,9 +81,9 @@
 
 グループ分けを最後まで残すのは、1 クリックで切り替えられる価値が高いため。レイアウトは ⚙ の中に同じものを常に置いてあるので先に畳む。
 
-## 色（ダーク）
+## 色（ダーク／ライト）
 
-今はダークのみ（ライトは未実装、[SETTINGS.md](SETTINGS.md)）。色は Apple HIG（Dark Mode・Color・Accessibility）、Material Design 3（Color roles・States・Segmented buttons）、WCAG 2.2 に合わせ、`src/index.css` の `@theme` に役割の名前で置く。部品は値を直接書かず、この名前を使う。ライトを作るときは値を差し替える。
+ダークとライトの両方があり、OS の外観に従う（設定は持たない）。ダークは `@theme`、ライトは同じ名前を `index.css` の `@media (prefers-color-scheme: light)` で差し替える。下の表の値はダーク。ライトでは「白の透明度」が「黒の透明度」になる。部品は白や黒の透明度を直接書かず、`bg-ink/10` のように `ink`（ダークは白、ライトは黒）を使う。写真を載せる面（ビューア・サムネイルのバッジ・HUD）と、白い文字を載せる `accent-fill` は、どちらでも同じ色のまま。ネイティブの部品は `color-scheme` で合わせる。色は Apple HIG（Dark Mode・Color・Accessibility）、Material Design 3（Color roles・States・Segmented buttons）、WCAG 2.2 に合わせ、`src/index.css` の `@theme` に役割の名前で置く。部品は値を直接書かず、この名前を使う。新しい色は両方の値を決めてから足す。
 
 | 役割 | 名前 | 値 | 使うところ |
 |---|---|---|---|

@@ -73,13 +73,13 @@ export type CellProps = {
 export const rowSelection = (selected: boolean, focused: boolean) =>
   `${
     selected
-      ? "bg-accent/25 text-white before:absolute before:inset-y-1 before:left-0 before:w-[3px] before:rounded-full before:bg-accent"
-      : "hover:bg-white/5"
+      ? "bg-accent/25 text-fg before:absolute before:inset-y-1 before:left-0 before:w-[3px] before:rounded-full before:bg-accent"
+      : "hover:bg-ink/5"
   } ${focused ? "outline-1 -outline-offset-1 outline-fg/60" : ""}`;
 
 export function Stars({ n, size = 9 }: { n: number; size?: number }) {
   return (
-    <span className="flex text-amber-400" title={`★${n}`}>
+    <span className="flex text-amber-500 dark:text-amber-400" title={`★${n}`}>
       {Array.from({ length: n }, (_, i) => (
         <Star key={i} size={size} fill="currentColor" strokeWidth={0} />
       ))}
@@ -523,7 +523,7 @@ function SectionBar({
               <button
                 key={`${s.start}:${n}`}
                 onClick={() => onJump(n)}
-                className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left hover:bg-white/10 ${n === current ? "bg-white/10 font-semibold" : ""}`}
+                className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left hover:bg-ink/10 ${n === current ? "bg-ink/10 font-semibold" : ""}`}
               >
                 {hex && (
                   <span

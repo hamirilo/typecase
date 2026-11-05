@@ -103,7 +103,7 @@ function ShelfButton({ item, className = "" }: { item: Item; className?: string 
       onDoubleClick={(e) => e.stopPropagation()}
       onClick={() => void toggleTray(rowIds([item]))}
       className={`items-center justify-center rounded ${
-        on ? "flex text-emerald-400" : "hidden text-dim group-hover:flex hover:text-fg"
+        on ? "flex text-emerald-600 dark:text-emerald-400" : "hidden text-dim group-hover:flex hover:text-fg"
       } ${className}`}
     >
       <Layers size={13} />
@@ -124,7 +124,7 @@ function FamilyToggle({ item }: { item: Item }) {
       onPointerDown={(e) => e.stopPropagation()}
       onDoubleClick={(e) => e.stopPropagation()}
       onClick={() => useStore.getState().toggleFamily(family)}
-      className="flex h-4 w-4 shrink-0 items-center justify-center self-center rounded text-dim hover:bg-white/10 hover:text-fg"
+      className="flex h-4 w-4 shrink-0 items-center justify-center self-center rounded text-dim hover:bg-ink/10 hover:text-fg"
     >
       <ChevronRight size={13} className={`transition-transform duration-150 ${open ? "rotate-90" : ""}`} />
     </button>
@@ -184,14 +184,14 @@ export const SpecimenRow = memo(function SpecimenRow(props: CellProps) {
           {/* Installed fonts have no flags, but go on the shelf to be compared. */}
           {(flags || isSystemId(item.id)) && <ShelfButton item={item} className="h-4 w-4" />}
           {flags && item.pinnedAt !== null && <Pin size={11} className="text-accent" fill="currentColor" />}
-          {flags && item.favorite && <Heart size={11} className="text-pink-400" fill="currentColor" />}
+          {flags && item.favorite && <Heart size={11} className="text-pink-600 dark:text-pink-400" fill="currentColor" />}
           {item.rating > 0 && <Stars n={item.rating} />}
           {!member && item.fontScript && (
-            <span className="rounded bg-white/8 px-1.5 py-px">{fontScriptLabel(item.fontScript)}</span>
+            <span className="rounded bg-ink/8 px-1.5 py-px">{fontScriptLabel(item.fontScript)}</span>
           )}
           {!member && (
             <span
-              className={`rounded px-1.5 py-px ${category === "none" ? "text-dim/70" : "bg-white/8"}`}
+              className={`rounded px-1.5 py-px ${category === "none" ? "text-dim/70" : "bg-ink/8"}`}
               title={item.fontCategoryUser ? "手で設定した書体" : "自動で判定した書体（詳細パネルで変更できます）"}
             >
               {fontCategoryLabel(category)}
@@ -200,7 +200,7 @@ export const SpecimenRow = memo(function SpecimenRow(props: CellProps) {
           )}
           {!member &&
             item.fontFeatures.map((k) => (
-              <span key={k} className="rounded bg-white/8 px-1.5 py-px">
+              <span key={k} className="rounded bg-ink/8 px-1.5 py-px">
                 {fontFeatureLabel(k)}
               </span>
             ))}
@@ -259,7 +259,7 @@ export const FontTile = memo(function FontTile(props: CellProps) {
     >
       <div
         className={`relative flex items-center justify-center overflow-hidden rounded-lg bg-raised px-2 transition-shadow duration-150 ${
-          selected ? "sel-ring" : focused ? "" : "hover:ring-2 hover:ring-white/15"
+          selected ? "sel-ring" : focused ? "" : "hover:ring-2 hover:ring-ink/15"
         } ${focused ? "focus-ring" : ""}`}
         style={{ width, height }}
       >
@@ -282,7 +282,7 @@ export const FontTile = memo(function FontTile(props: CellProps) {
         {flags && (item.pinnedAt !== null || item.favorite) && (
           <span className="pointer-events-none absolute top-1.5 right-1.5 flex gap-1">
             {item.pinnedAt !== null && <Pin size={11} className="text-accent" fill="currentColor" />}
-            {item.favorite && <Heart size={11} className="text-pink-400" fill="currentColor" />}
+            {item.favorite && <Heart size={11} className="text-pink-600 dark:text-pink-400" fill="currentColor" />}
           </span>
         )}
         {(flags || isSystemId(item.id)) && (
@@ -303,7 +303,7 @@ export const FontTile = memo(function FontTile(props: CellProps) {
         <div className="mt-1.5 w-full text-center leading-[15px]">
           {info.name && (
             <div className="flex items-center justify-center gap-1.5 text-xs">
-              <span className={`truncate ${selected ? "text-white" : ""}`} title={item.name}>
+              <span className={`truncate ${selected ? "text-fg" : ""}`} title={item.name}>
                 {item.fontFamily || item.name}
               </span>
               <FamilyCount item={item} />
