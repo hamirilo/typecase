@@ -16,6 +16,7 @@ fn meta(ps: &str) -> crate::fonts::FontMeta {
         script: "latin",
         category: None,
         features: vec![],
+        axes: vec![],
         ps_name: ps.into(),
     }
 }
@@ -498,6 +499,73 @@ fn find_or_create_reuses() {
     let child = find_or_create_folder(&conn, Some(&a), "Sans").unwrap();
     assert_ne!(child, a, "same name under a different parent is a different folder");
     assert_eq!(find_or_create_folder(&conn, Some(&a), "Sans").unwrap(), child);
+}
+
+/// 軸 and スタイル数 in the filter row: axes of variable fonts, and the size of a font's family.
+#[test]
+fn axes_and_family_size_filters() {
+    let mut conn = mem();
+    // Family "Sans": 300 / 400 / 700 (three styles, light to bold); "Slab": one font; "Var": variable.
+    for (id, family, wmin, wmax, axes, at) in [
+        ("a", "Sans", 300, 300, "", 1),
+        ("b", "Sans", 400, 400, "", 2),
+        ("c", "Sans", 700, 700, "", 3),
+        ("d", "Slab", 400, 400, "", 4),
+        ("e", "Var", 100, 900, "wght,opsz", 5),
+    ] {
+        add(&mut conn, id, &format!("{id}.ttf"), at);
+        conn.execute(
+            "UPDATE items SET font_script = 'latin', font_features = '', font_family = ?2,
+               font_weight_min = ?3, font_weight_max = ?4, font_axes = ?5 WHERE id = ?1",
+            params![id, family, wmin, wmax, axes],
+        )
+        .unwrap();
+    }
+    let find = |conn: &Connection, set: fn(&mut Filter)| {
+        let mut f = Filter::default();
+        set(&mut f);
+        let mut query = q(View::All);
+        query.filter = f;
+        ids(query_items(conn, &query).unwrap())
+    };
+    assert_eq!(find(&conn, |f| f.font_axes = vec!["wght".into()]), s(&["e"]));
+    assert_eq!(find(&conn, |f| f.font_axes = vec!["opsz".into(), "wdth".into()]), s(&["e"]), "any of");
+    assert!(find(&conn, |f| f.font_axes = vec!["wdth".into()]).is_empty());
+    assert!(find(&conn, |f| f.font_axes = vec!["ws".into()]).is_empty(), "whole words");
+    assert_eq!(find(&conn, |f| f.font_styles = vec!["1".into()]), s(&["d", "e"]));
+    assert_eq!(find(&conn, |f| f.font_styles = vec!["2-3".into()]), s(&["a", "b", "c"]));
+    assert!(find(&conn, |f| f.font_styles = vec!["9+".into()]).is_empty());
+    assert_eq!(find(&conn, |f| f.font_styles = vec!["wide".into()]), s(&["a", "b", "c", "e"]), "light to bold");
+    assert_eq!(find(&conn, |f| f.font_styles = vec!["1".into(), "2-3".into()]).len(), 5, "any of");
+    assert!(find(&conn, |f| f.font_styles = vec!["nonsense".into()]).is_empty());
+    // A trashed font doesn't count towards its family.
+    conn.execute("UPDATE items SET deleted_at = 1 WHERE id = 'c'", []).unwrap();
+    assert_eq!(find(&conn, |f| f.font_styles = vec!["2-3".into()]), s(&["a", "b"]));
+    assert_eq!(find(&conn, |f| f.font_styles = vec!["wide".into()]), s(&["e"]));
+
+    // Counts: each value over the matched fonts.
+    let facets = facet_counts(&conn, &q(View::All)).unwrap();
+    assert_eq!(facets.font_axes, BTreeMap::from([("wght".to_string(), 1), ("opsz".to_string(), 1)]));
+    assert_eq!(
+        facets.font_styles,
+        BTreeMap::from([("1".to_string(), 2), ("2-3".to_string(), 2), ("wide".to_string(), 1)])
+    );
+}
+
+/// Libraries from before the axes were stored have them NULL: those fonts are read again.
+#[test]
+fn fonts_without_axes_are_read_again() {
+    let mut conn = mem();
+    add(&mut conn, "a", "a.ttf", 1);
+    conn.execute("UPDATE items SET font_script = 'latin', font_features = '', font_axes = NULL WHERE id = 'a'", [])
+        .unwrap();
+    assert_eq!(missing_font_meta(&conn).unwrap().len(), 1);
+    let mut m = meta("ps-a");
+    m.axes = vec!["wght"];
+    set_font_meta(&mut conn, &[("a".to_string(), m)]).unwrap();
+    assert!(missing_font_meta(&conn).unwrap().is_empty());
+    let axes: String = conn.query_row("SELECT font_axes FROM items WHERE id = 'a'", [], |r| r.get(0)).unwrap();
+    assert_eq!(axes, "wght");
 }
 
 /// A writing system or a typeface style opened as a place (the sidebar's 言語 / 書体).

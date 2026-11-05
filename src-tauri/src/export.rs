@@ -270,6 +270,7 @@ mod tests {
                 script: "latin",
                 category: None,
                 features: vec![],
+                axes: vec![],
                 ps_name: String::new(),
             },
         };

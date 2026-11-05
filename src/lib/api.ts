@@ -97,12 +97,34 @@ export const FONT_FEATURES: { key: string; label: string }[] = [
   { key: "coding", label: "プログラミング向け" },
   { key: "variable", label: "可変フォント" },
   { key: "italic", label: "イタリック・斜体" },
+  { key: "color", label: "カラーフォント" },
+];
+
+/** Variation axes of variable fonts (fonts.rs `AXES`); "other" = any a font has of its own. */
+export const FONT_AXES: { key: string; label: string; tag?: string }[] = [
+  { key: "wght", label: "太さ", tag: "wght" },
+  { key: "wdth", label: "幅", tag: "wdth" },
+  { key: "opsz", label: "光学サイズ", tag: "opsz" },
+  { key: "ital", label: "イタリック", tag: "ital" },
+  { key: "slnt", label: "斜体の角度", tag: "slnt" },
+  { key: "other", label: "そのほかの軸" },
+];
+
+/** How many styles a font's family has (db.rs `FONT_STYLES`); "wide" = from light to bold. */
+export const FONT_STYLES: { key: string; label: string; names?: string }[] = [
+  { key: "1", label: "1 スタイル" },
+  { key: "2-3", label: "2〜3 スタイル" },
+  { key: "4-8", label: "4〜8 スタイル" },
+  { key: "9+", label: "9 スタイル以上" },
+  { key: "wide", label: "細〜太をそろえる", names: "Light 以下〜Bold 以上" },
 ];
 
 export const fontScriptLabel = (k: string) => FONT_SCRIPTS.find((x) => x.key === k)?.label ?? k;
 export const fontCategoryLabel = (k: string) => FONT_CATEGORIES.find((x) => x.key === k)?.label ?? k;
 export const fontWeightLabel = (k: string) => FONT_WEIGHTS.find((x) => x.key === k)?.label ?? k;
 export const fontFeatureLabel = (k: string) => FONT_FEATURES.find((x) => x.key === k)?.label ?? k;
+export const fontAxisLabel = (k: string) => FONT_AXES.find((x) => x.key === k)?.label ?? k;
+export const fontStyleLabel = (k: string) => FONT_STYLES.find((x) => x.key === k)?.label ?? k;
 
 /** A font's typeface style: the user's choice, else the guess, else "none". */
 export const fontCategoryOf = (item: Pick<Item, "fontCategory" | "fontCategoryUser">) =>
@@ -184,6 +206,9 @@ export interface Filter {
   fontCategories: string[];
   fontWeights: string[];
   fontFeatures: string[];
+  /** Variable fonts with any of these axes / fonts of families this size. */
+  fontAxes: string[];
+  fontStyles: string[];
   exts: string[];
   /** ms; after inclusive, before exclusive. */
   importedAfter: number | null;
@@ -198,6 +223,8 @@ export const EMPTY_FILTER: Filter = {
   fontCategories: [],
   fontWeights: [],
   fontFeatures: [],
+  fontAxes: [],
+  fontStyles: [],
   exts: [],
   importedAfter: null,
   importedBefore: null,
@@ -252,6 +279,8 @@ export interface Facets {
   fontCategories: Record<string, number>;
   fontWeights: Record<string, number>;
   fontFeatures: Record<string, number>;
+  fontAxes: Record<string, number>;
+  fontStyles: Record<string, number>;
 }
 
 export interface Counts {

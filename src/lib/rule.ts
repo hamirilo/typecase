@@ -1,8 +1,10 @@
 // Helpers for describing filters / smart folder rules in the UI.
 import {
+  fontAxisLabel,
   fontCategoryLabel,
   fontFeatureLabel,
   fontScriptLabel,
+  fontStyleLabel,
   fontWeightLabel,
   formatBytes,
   type Filter,
@@ -71,7 +73,9 @@ export function describeRule(rule: Rule, tags: Tag[]): string[] {
   if (f.fontScripts?.length) out.push(`言語: ${f.fontScripts.map(fontScriptLabel).join("・")}`);
   if (f.fontCategories?.length) out.push(`書体: ${f.fontCategories.map(fontCategoryLabel).join("・")}`);
   if (f.fontWeights?.length) out.push(`太さ: ${f.fontWeights.map(fontWeightLabel).join("・")}`);
+  if (f.fontStyles?.length) out.push(`スタイル数: ${f.fontStyles.map(fontStyleLabel).join("・")}`);
   if (f.fontFeatures?.length) out.push(`特徴: ${f.fontFeatures.map(fontFeatureLabel).join("・")}`);
+  if (f.fontAxes?.length) out.push(`軸: ${f.fontAxes.map(fontAxisLabel).join("・")}`);
   if (f.exts.length) out.push(`形式: ${f.exts.join(", ")}`);
   const date = describeDate(f);
   if (date) out.push(`追加日: ${date}`);

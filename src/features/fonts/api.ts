@@ -68,6 +68,8 @@ export interface SystemFont {
   script: string;
   category: string | null;
   features: string[];
+  /** Variation axes (FONT_AXES keys), empty unless variable. */
+  axes: string[];
 }
 
 /** Installed fonts on the font shelf (src-tauri/src/fonts/commands.rs `SystemTray`). */

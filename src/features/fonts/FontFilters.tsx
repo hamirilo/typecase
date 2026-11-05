@@ -5,10 +5,19 @@
 // FilterRow supplies the button and menu chrome and renders these: the import
 // cycle is fine because everything is used at render time, not at load.
 import { Option, Pill, toggled, useFacets, type CondProps } from "../../components/FilterRow";
-import { FONT_CATEGORIES, FONT_FEATURES, FONT_SCRIPTS, FONT_WEIGHTS, type Facets, type Filter } from "../../lib/api";
+import {
+  FONT_AXES,
+  FONT_CATEGORIES,
+  FONT_FEATURES,
+  FONT_SCRIPTS,
+  FONT_STYLES,
+  FONT_WEIGHTS,
+  type Facets,
+  type Filter,
+} from "../../lib/api";
 import { CLEARED, useStore, type ConditionKey } from "../../store";
 
-type FontKey = "fontScripts" | "fontCategories" | "fontWeights" | "fontFeatures";
+type FontKey = "fontScripts" | "fontCategories" | "fontWeights" | "fontStyles" | "fontFeatures" | "fontAxes";
 
 const CONDITIONS: {
   key: FontKey & ConditionKey;
@@ -18,7 +27,9 @@ const CONDITIONS: {
   { key: "fontScripts", label: "言語", values: FONT_SCRIPTS },
   { key: "fontCategories", label: "書体", values: FONT_CATEGORIES },
   { key: "fontWeights", label: "太さ", values: FONT_WEIGHTS },
+  { key: "fontStyles", label: "スタイル数", values: FONT_STYLES },
   { key: "fontFeatures", label: "特徴", values: FONT_FEATURES },
+  { key: "fontAxes", label: "軸", values: FONT_AXES },
 ];
 
 export function FontConditions({ cond, locked, onLocked }: CondProps) {

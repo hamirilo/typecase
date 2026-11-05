@@ -29,6 +29,8 @@ type MockItem = Omit<
   fontCategory?: string | null;
   fontCategoryUser?: string | null;
   fontFeatures?: string[];
+  /** Variation axes of a variable font (db.rs `font_axes`). */
+  fontAxes?: string[];
   fontPsName?: string;
 };
 
@@ -65,6 +67,7 @@ const systemFonts: SystemFont[] = (
   script,
   category,
   features,
+  axes: features.includes("variable") ? ["wght"] : [],
 }));
 
 /** A library font, or an installed one shaped like it (the font commands take both ids). */
@@ -119,6 +122,24 @@ let tagSeq = 0;
 let uid = 0;
 const id = () => `m${(++uid).toString(36)}`;
 
+/** Axes of the mock's variable fonts. */
+const AXES_OF: Record<string, string[]> = {
+  "Inter[wght].woff2": ["wght", "opsz"],
+  "RobotoFlex[wdth,wght].ttf": ["wght", "wdth", "opsz"],
+};
+
+/** Styles of a mock font's family: how many fonts share it, and the weights they span (db.rs `FAMILY_STYLES`). */
+function family(i: MockItem) {
+  const same = i.fontFamily ? live().filter((x) => x.fontFamily === i.fontFamily) : [i];
+  const lo = Math.min(...same.map((x) => x.fontWeightMin ?? x.fontWeight ?? 400));
+  const hi = Math.max(...same.map((x) => x.fontWeightMax ?? x.fontWeight ?? 400));
+  return { n: same.length, lo, hi };
+}
+const styleKeys = (i: MockItem) => {
+  const { n, lo, hi } = family(i);
+  return [n === 1 ? "1" : n <= 3 ? "2-3" : n <= 8 ? "4-8" : "9+", ...(lo <= 300 && hi >= 700 ? ["wide"] : [])];
+};
+
 function seed() {
   // An installed font put on the shelf on another computer, which this one doesn't have.
   tray.set("sys:elsewhere", ++traySeq);
@@ -128,6 +149,8 @@ function seed() {
     ["NotoSansJP-Bold.ttf", "Noto Sans JP", 700, "ja", "gothic", []],
     ["NotoSansJP-Regular.ttf", "Noto Sans JP", 400, "ja", "gothic", []],
     ["Inter[wght].woff2", "Inter", 400, "latin", "gothic", ["variable"], [100, 900]],
+    ["RobotoFlex[wdth,wght].ttf", "Roboto Flex", 400, "latin", "gothic", ["variable"], [100, 1000]],
+    ["Nabla-Regular.ttf", "Nabla", 400, "latin", "display", ["color"]],
     ["Hiragino.ttc", "ヒラギノ角ゴシック", 300, "ja", "gothic", []],
     ["NotoSansJP-Light.ttf", "Noto Sans JP", 300, "ja", "gothic", []],
     ["NotoSerifJP-Regular.otf", "Noto Serif JP", 400, "ja", "mincho", []],
@@ -152,6 +175,7 @@ function seed() {
       fontScript,
       fontCategory,
       fontFeatures,
+      fontAxes: AXES_OF[file] ?? [],
       // The file's name for most; the Hiragino and Noto Sans JP Regular are installed too (`systemFonts`).
       fontPsName: file === "Hiragino.ttc" ? "HiraginoSans-W3" : file.replace(/\.[^.]+$/, ""),
       id: id(),
@@ -253,6 +277,8 @@ function applyRule(r: MockItem[], rule: Rule): MockItem[] {
     r = r.filter((i) => f.fontCategories.includes(i.fontCategoryUser ?? i.fontCategory ?? "none"));
   if (f.fontWeights?.length) r = r.filter((i) => f.fontWeights.some((k) => inWeight(i, k)));
   if (f.fontFeatures?.length) r = r.filter((i) => f.fontFeatures.some((k) => (i.fontFeatures ?? []).includes(k)));
+  if (f.fontAxes?.length) r = r.filter((i) => f.fontAxes.some((k) => (i.fontAxes ?? []).includes(k)));
+  if (f.fontStyles?.length) r = r.filter((i) => f.fontStyles.some((k) => styleKeys(i).includes(k)));
   if (f.exts?.length) r = r.filter((i) => f.exts.map(ext).includes(ext(i.ext)));
   const within = (v: number, min: number | null, max: number | null) =>
     (min == null || v >= min) && (max == null || v <= max);
@@ -324,6 +350,14 @@ function fontCounts(list: MockItem[]) {
     ),
     fontFeatures: countBy(
       fonts.flatMap((i) => (i.fontFeatures ?? []).map((k) => ({ k }))),
+      (x) => x.k,
+    ),
+    fontAxes: countBy(
+      fonts.flatMap((i) => (i.fontAxes ?? []).map((k) => ({ k }))),
+      (x) => x.k,
+    ),
+    fontStyles: countBy(
+      fonts.flatMap((i) => styleKeys(i).map((k) => ({ k }))),
       (x) => x.k,
     ),
   };

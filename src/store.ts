@@ -392,6 +392,8 @@ export function activeConditions(s: {
     (f.fontCategories.length ? 1 : 0) +
     (f.fontWeights.length ? 1 : 0) +
     (f.fontFeatures.length ? 1 : 0) +
+    (f.fontAxes.length ? 1 : 0) +
+    (f.fontStyles.length ? 1 : 0) +
     (f.exts.length ? 1 : 0) +
     (f.importedAfter != null || f.importedBefore != null ? 1 : 0) +
     (f.minSize != null || f.maxSize != null ? 1 : 0)
@@ -503,7 +505,9 @@ export type ConditionKey =
   | "fontScripts"
   | "fontCategories"
   | "fontWeights"
-  | "fontFeatures";
+  | "fontFeatures"
+  | "fontAxes"
+  | "fontStyles";
 
 /** What clearing each condition sets. */
 export const CLEARED: Record<ConditionKey, { minRating?: 0; tagFilter?: number[]; filter?: Partial<Filter> }> = {
@@ -516,6 +520,8 @@ export const CLEARED: Record<ConditionKey, { minRating?: 0; tagFilter?: number[]
   fontCategories: { filter: { fontCategories: [] } },
   fontWeights: { filter: { fontWeights: [] } },
   fontFeatures: { filter: { fontFeatures: [] } },
+  fontAxes: { filter: { fontAxes: [] } },
+  fontStyles: { filter: { fontStyles: [] } },
 };
 
 type QueryState = Pick<

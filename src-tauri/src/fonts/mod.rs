@@ -372,6 +372,8 @@ pub struct FontMeta {
     pub category: Option<&'static str>,
     /// Traits a font has any number of, in `FEATURES` order: see `features`.
     pub features: Vec<&'static str>,
+    /// Variation axes of a variable font, in `AXES` order (empty when it isn't one): see `axes`.
+    pub axes: Vec<&'static str>,
     /// PostScript name ("" when the font has none): what tells the same font
     /// in the library and installed on this computer (docs/SYSTEM_FONTS.md).
     pub ps_name: String,
@@ -382,6 +384,11 @@ impl FontMeta {
     pub fn features_text(&self) -> String {
         self.features.join(",")
     }
+
+    /// The axes as stored in the DB ("wght,wdth"; "" = none, so a font read is told from one not read).
+    pub fn axes_text(&self) -> String {
+        self.axes.join(",")
+    }
 }
 
 /// Writing systems a font is filed under: 日本語, 欧文, 中国語, 韓国語, その他.
@@ -390,8 +397,11 @@ pub const SCRIPTS: &[&str] = &["ja", "latin", "zh", "ko", "other"];
 /// 筆書体, 手書き, デザイン. Monospace is a feature, not a style (a monospaced
 /// font is still a gothic or a mincho).
 pub const CATEGORIES: &[&str] = &["mincho", "gothic", "maru", "slab", "brush", "hand", "display"];
-/// Features: 等幅, プログラミング向け, 可変フォント, イタリック・斜体.
-pub const FEATURES: &[&str] = &["mono", "coding", "variable", "italic"];
+/// Features: 等幅, プログラミング向け, 可変フォント, イタリック・斜体, カラーフォント.
+pub const FEATURES: &[&str] = &["mono", "coding", "variable", "italic", "color"];
+/// Variation axes a filter can pick: 太さ, 幅, 光学サイズ, イタリック, 斜体の角度, and
+/// "other" for any other (a font's own, like a decorative one).
+pub const AXES: &[&str] = &["wght", "wdth", "opsz", "ital", "slnt", "other"];
 
 pub fn meta(sfnt: &[u8]) -> Result<FontMeta, String> {
     let font = face_ref(sfnt, 0)?;
@@ -413,6 +423,7 @@ pub fn meta(sfnt: &[u8]) -> Result<FontMeta, String> {
         script: script(&font),
         category: category(&font),
         features: features(&font),
+        axes: axes(&font),
         ps_name: name(&font, &[StringId::POSTSCRIPT_NAME]),
     })
 }
@@ -680,7 +691,28 @@ fn features(font: &FontRef) -> Vec<&'static str> {
     if font.attributes().style != skrifa::attribute::Style::Normal {
         out.push("italic");
     }
+    if is_color(font) {
+        out.push("color");
+    }
     out
+}
+
+/// Colour glyphs: COLR (vector, v0 / v1), SVG, or bitmaps in colour (CBDT, sbix).
+fn is_color(font: &FontRef) -> bool {
+    use skrifa::raw::types::Tag;
+    [b"COLR", b"SVG ", b"CBDT", b"sbix"].iter().any(|t| font.data_for_tag(Tag::new(t)).is_some())
+}
+
+/// The variation axes of a variable font, in `AXES` order.
+fn axes(font: &FontRef) -> Vec<&'static str> {
+    let tags: Vec<[u8; 4]> = font.axes().iter().map(|a| a.tag().to_be_bytes()).collect();
+    AXES.iter()
+        .filter(|k| match **k {
+            "other" => tags.iter().any(|t| !AXES[..5].iter().any(|k| k.as_bytes() == t)),
+            k => tags.iter().any(|t| k.as_bytes() == t),
+        })
+        .copied()
+        .collect()
 }
 
 /// Every face, and the characters of face `index`.
@@ -905,11 +937,13 @@ pub mod tests {
         assert!(wght.min < wght.default && wght.default <= wght.max);
         let m = meta(&ttf).unwrap();
         assert!(m.features.contains(&"variable"));
+        assert!(m.axes.contains(&"wght"), "axes: {:?}", m.axes);
         assert_eq!((m.weight_min, m.weight_max), (wght.min.round() as u32, wght.max.round() as u32));
         assert!(face.instances.len() >= 2, "named styles: {:?}", face.instances);
         // A plain font has neither.
         let Some(plain) = system_font(SINGLE) else { return };
         assert!(faces(&plain).unwrap()[0].axes.is_empty());
+        assert!(meta(&plain).unwrap().axes.is_empty());
     }
 
     #[test]
