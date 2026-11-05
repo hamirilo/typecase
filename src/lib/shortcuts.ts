@@ -73,7 +73,7 @@ export function shortcutSections(): ShortcutSection[] {
     },
     {
       id: "item",
-      title: "選択した項目",
+      title: "選択したフォント",
       rows: [
         cmd("item.favorite"),
         cmd("item.pin"),

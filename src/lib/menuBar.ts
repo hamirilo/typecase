@@ -209,7 +209,7 @@ async function build(libraries: LibraryEntry[]): Promise<Menu> {
     cmd("edit.filter"),
   ]);
 
-  const item = submenu("項目", [
+  const item = submenu("フォント", [
     cmd("item.show"),
     sep(),
     cmd("item.favorite"),
