@@ -29,6 +29,8 @@ type MockItem = Omit<
   fontCategory?: string | null;
   fontCategoryUser?: string | null;
   fontFeatures?: string[];
+  /** Variation axes of a variable font (db.rs `font_axes`). */
+  fontAxes?: string[];
   fontPsName?: string;
 };
 
@@ -65,6 +67,7 @@ const systemFonts: SystemFont[] = (
   script,
   category,
   features,
+  axes: features.includes("variable") ? ["wght"] : [],
 }));
 
 /** A library font, or an installed one shaped like it (the font commands take both ids). */
@@ -119,6 +122,35 @@ let tagSeq = 0;
 let uid = 0;
 const id = () => `m${(++uid).toString(36)}`;
 
+/** A few characters some mock fonts lack (the real app reads each font's cmap, db.rs `covers`). */
+const LACKING: Record<string, string> = { "Yuji-Syuku.ttf": "鬱", "keifont.ttf": "鬱薔薇驚" };
+function mockCovers(i: MockItem, ch: string): boolean {
+  const c = ch.codePointAt(0)!;
+  if ((LACKING[i.fileName] ?? "").includes(ch)) return false;
+  if (c < 0x250) return true;
+  if (c >= 0x4e00 && c <= 0x9fff) return ["ja", "zh", "ko"].includes(i.fontScript ?? "");
+  if ((c >= 0x3000 && c <= 0x30ff) || (c >= 0xff00 && c <= 0xffef)) return i.fontScript === "ja";
+  return false;
+}
+
+/** Axes of the mock's variable fonts. */
+const AXES_OF: Record<string, string[]> = {
+  "Inter[wght].woff2": ["wght", "opsz"],
+  "RobotoFlex[wdth,wght].ttf": ["wght", "wdth", "opsz"],
+};
+
+/** Styles of a mock font's family: how many fonts share it, and the weights they span (db.rs `FAMILY_STYLES`). */
+function family(i: MockItem) {
+  const same = i.fontFamily ? live().filter((x) => x.fontFamily === i.fontFamily) : [i];
+  const lo = Math.min(...same.map((x) => x.fontWeightMin ?? x.fontWeight ?? 400));
+  const hi = Math.max(...same.map((x) => x.fontWeightMax ?? x.fontWeight ?? 400));
+  return { n: same.length, lo, hi };
+}
+const styleKeys = (i: MockItem) => {
+  const { n, lo, hi } = family(i);
+  return [n === 1 ? "1" : n <= 3 ? "2-3" : n <= 8 ? "4-8" : "9+", ...(lo <= 300 && hi >= 700 ? ["wide"] : [])];
+};
+
 function seed() {
   // An installed font put on the shelf on another computer, which this one doesn't have.
   tray.set("sys:elsewhere", ++traySeq);
@@ -128,6 +160,8 @@ function seed() {
     ["NotoSansJP-Bold.ttf", "Noto Sans JP", 700, "ja", "gothic", []],
     ["NotoSansJP-Regular.ttf", "Noto Sans JP", 400, "ja", "gothic", []],
     ["Inter[wght].woff2", "Inter", 400, "latin", "gothic", ["variable"], [100, 900]],
+    ["RobotoFlex[wdth,wght].ttf", "Roboto Flex", 400, "latin", "gothic", ["variable"], [100, 1000]],
+    ["Nabla-Regular.ttf", "Nabla", 400, "latin", "display", ["color"]],
     ["Hiragino.ttc", "ヒラギノ角ゴシック", 300, "ja", "gothic", []],
     ["NotoSansJP-Light.ttf", "Noto Sans JP", 300, "ja", "gothic", []],
     ["NotoSerifJP-Regular.otf", "Noto Serif JP", 400, "ja", "mincho", []],
@@ -152,6 +186,7 @@ function seed() {
       fontScript,
       fontCategory,
       fontFeatures,
+      fontAxes: AXES_OF[file] ?? [],
       // The file's name for most; the Hiragino and Noto Sans JP Regular are installed too (`systemFonts`).
       fontPsName: file === "Hiragino.ttc" ? "HiraginoSans-W3" : file.replace(/\.[^.]+$/, ""),
       id: id(),
@@ -253,6 +288,9 @@ function applyRule(r: MockItem[], rule: Rule): MockItem[] {
     r = r.filter((i) => f.fontCategories.includes(i.fontCategoryUser ?? i.fontCategory ?? "none"));
   if (f.fontWeights?.length) r = r.filter((i) => f.fontWeights.some((k) => inWeight(i, k)));
   if (f.fontFeatures?.length) r = r.filter((i) => f.fontFeatures.some((k) => (i.fontFeatures ?? []).includes(k)));
+  if (f.fontChars?.trim()) r = r.filter((i) => [...f.fontChars].every((c) => !c.trim() || mockCovers(i, c)));
+  if (f.fontAxes?.length) r = r.filter((i) => f.fontAxes.some((k) => (i.fontAxes ?? []).includes(k)));
+  if (f.fontStyles?.length) r = r.filter((i) => f.fontStyles.some((k) => styleKeys(i).includes(k)));
   if (f.exts?.length) r = r.filter((i) => f.exts.map(ext).includes(ext(i.ext)));
   const within = (v: number, min: number | null, max: number | null) =>
     (min == null || v >= min) && (max == null || v <= max);
@@ -293,6 +331,8 @@ function matched(q: ItemQuery): MockItem[] {
   if (v.kind === "pinned") r = r.filter((i) => i.pinnedAt !== null);
   if (v.kind === "tray") r = r.filter((i) => tray.has(i.id));
   if (v.kind === "tag") r = r.filter((i) => hasTag(i.id, v.id));
+  if (v.kind === "fontScript") r = r.filter((i) => i.fontScript === v.id);
+  if (v.kind === "fontCategory") r = r.filter((i) => (i.fontCategoryUser ?? i.fontCategory ?? "none") === v.id);
   if (v.kind === "folder") {
     const ids = q.includeSubfolders ? descendants(v.id) : [v.id];
     r = r.filter((i) => ids.some((f) => inFolder(i.id, f)));
@@ -322,6 +362,14 @@ function fontCounts(list: MockItem[]) {
     ),
     fontFeatures: countBy(
       fonts.flatMap((i) => (i.fontFeatures ?? []).map((k) => ({ k }))),
+      (x) => x.k,
+    ),
+    fontAxes: countBy(
+      fonts.flatMap((i) => (i.fontAxes ?? []).map((k) => ({ k }))),
+      (x) => x.k,
+    ),
+    fontStyles: countBy(
+      fonts.flatMap((i) => styleKeys(i).map((k) => ({ k }))),
       (x) => x.k,
     ),
   };
@@ -676,6 +724,14 @@ function handle(cmd: string, a: any): unknown {
       return [...tags]
         .sort((x, y) => x.name.localeCompare(y.name))
         .map((t) => ({ ...t, count: live().filter((i) => hasTag(i.id, t.id)).length })) satisfies Tag[];
+    case "create_tag": {
+      const name = String(a.name).trim();
+      if (!name) return null;
+      const known = tags.find((x) => x.name.toLowerCase() === name.toLowerCase());
+      const t = known ?? { id: ++tagSeq, name, color: null };
+      if (!known) tags.push(t);
+      return { ...t, count: live().filter((i) => hasTag(i.id, t.id)).length } satisfies Tag;
+    }
     case "add_tags":
       addTags(a.ids, a.names);
       return;

@@ -229,6 +229,8 @@ pub fn compute_missing_font_meta(lib: &Mutex<Option<Library>>) -> Result<usize, 
                     script: "other",
                     category: None,
                     features: Vec::new(),
+                    axes: Vec::new(),
+                    coverage: Vec::new(),
                     ps_name: String::new(),
                 });
             (id.clone(), meta)

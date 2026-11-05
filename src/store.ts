@@ -184,6 +184,8 @@ interface State {
   recentTags: number[];
   /** Folder whose name is being edited inline in the sidebar. */
   renamingFolder: string | null;
+  /** The sidebar's new-tag row is open (the tag's name is being typed). */
+  creatingTag: boolean;
   /** Bumped to ask the inspector to focus the item name field. */
   renameItemSeq: number;
   picker: "move" | "goto" | null;
@@ -293,6 +295,7 @@ interface State {
   rememberFolders: (ids: string[]) => void;
   rememberTags: (names: string[]) => void;
   setRenamingFolder: (id: string | null) => void;
+  setCreatingTag: (on: boolean) => void;
   requestItemRename: () => void;
   setPicker: (p: State["picker"]) => void;
   /** "last": the page shown last (一般 if it was the library's and none is open). */
@@ -389,6 +392,9 @@ export function activeConditions(s: {
     (f.fontCategories.length ? 1 : 0) +
     (f.fontWeights.length ? 1 : 0) +
     (f.fontFeatures.length ? 1 : 0) +
+    (f.fontAxes.length ? 1 : 0) +
+    (f.fontStyles.length ? 1 : 0) +
+    (f.fontChars.trim() ? 1 : 0) +
     (f.exts.length ? 1 : 0) +
     (f.importedAfter != null || f.importedBefore != null ? 1 : 0) +
     (f.minSize != null || f.maxSize != null ? 1 : 0)
@@ -500,7 +506,10 @@ export type ConditionKey =
   | "fontScripts"
   | "fontCategories"
   | "fontWeights"
-  | "fontFeatures";
+  | "fontFeatures"
+  | "fontAxes"
+  | "fontStyles"
+  | "fontChars";
 
 /** What clearing each condition sets. */
 export const CLEARED: Record<ConditionKey, { minRating?: 0; tagFilter?: number[]; filter?: Partial<Filter> }> = {
@@ -513,6 +522,9 @@ export const CLEARED: Record<ConditionKey, { minRating?: 0; tagFilter?: number[]
   fontCategories: { filter: { fontCategories: [] } },
   fontWeights: { filter: { fontWeights: [] } },
   fontFeatures: { filter: { fontFeatures: [] } },
+  fontAxes: { filter: { fontAxes: [] } },
+  fontStyles: { filter: { fontStyles: [] } },
+  fontChars: { filter: { fontChars: "" } },
 };
 
 type QueryState = Pick<
@@ -560,6 +572,10 @@ export function placeTotal(
       return s.counts[v.kind];
     case "tag":
       return n(s.tags.find((t) => t.id === v.id));
+    case "fontScript":
+      return s.counts.fontScripts[v.id] ?? 0;
+    case "fontCategory":
+      return s.counts.fontCategories[v.id] ?? 0;
     case "smart":
       return n(s.smartFolders.find((f) => f.id === v.id));
     case "folder": {
@@ -605,6 +621,10 @@ export function entryOfView(v: View): string | null {
       return "section:smart";
     case "tag":
       return "section:tags";
+    case "fontScript":
+      return "section:scripts";
+    case "fontCategory":
+      return "section:categories";
     case "all":
     case "trash":
       return null;
@@ -649,6 +669,7 @@ export const useStore = create<State>((set, get) => ({
   recentFolders: [],
   recentTags: [],
   renamingFolder: null,
+  creatingTag: false,
   renameItemSeq: 0,
   picker: null,
   settingsTab: null,
@@ -969,6 +990,7 @@ export const useStore = create<State>((set, get) => ({
     pendingRecentTags = [...names, ...pendingRecentTags.filter((n) => !names.includes(n))];
   },
   setRenamingFolder: (renamingFolder) => set({ renamingFolder }),
+  setCreatingTag: (creatingTag) => set({ creatingTag }),
   requestItemRename: () => set({ renameItemSeq: get().renameItemSeq + 1, inspectorOpen: true, panelTab: "info" }),
   setPicker: (picker) => set({ picker }),
   openSettings: (tab) =>

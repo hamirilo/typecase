@@ -372,6 +372,11 @@ pub struct FontMeta {
     pub category: Option<&'static str>,
     /// Traits a font has any number of, in `FEATURES` order: see `features`.
     pub features: Vec<&'static str>,
+    /// Variation axes of a variable font, in `AXES` order (empty when it isn't one): see `axes`.
+    pub axes: Vec<&'static str>,
+    /// The characters the first face maps, as code point ranges (`coverage`); what the filter's
+    /// 収録文字 asks (`covers`). Empty when the font maps none.
+    pub coverage: Vec<u8>,
     /// PostScript name ("" when the font has none): what tells the same font
     /// in the library and installed on this computer (docs/SYSTEM_FONTS.md).
     pub ps_name: String,
@@ -382,6 +387,11 @@ impl FontMeta {
     pub fn features_text(&self) -> String {
         self.features.join(",")
     }
+
+    /// The axes as stored in the DB ("wght,wdth"; "" = none, so a font read is told from one not read).
+    pub fn axes_text(&self) -> String {
+        self.axes.join(",")
+    }
 }
 
 /// Writing systems a font is filed under: 日本語, 欧文, 中国語, 韓国語, その他.
@@ -390,8 +400,11 @@ pub const SCRIPTS: &[&str] = &["ja", "latin", "zh", "ko", "other"];
 /// 筆書体, 手書き, デザイン. Monospace is a feature, not a style (a monospaced
 /// font is still a gothic or a mincho).
 pub const CATEGORIES: &[&str] = &["mincho", "gothic", "maru", "slab", "brush", "hand", "display"];
-/// Features: 等幅, プログラミング向け, 可変フォント, イタリック・斜体.
-pub const FEATURES: &[&str] = &["mono", "coding", "variable", "italic"];
+/// Features: 等幅, プログラミング向け, 可変フォント, イタリック・斜体, カラーフォント.
+pub const FEATURES: &[&str] = &["mono", "coding", "variable", "italic", "color"];
+/// Variation axes a filter can pick: 太さ, 幅, 光学サイズ, イタリック, 斜体の角度, and
+/// "other" for any other (a font's own, like a decorative one).
+pub const AXES: &[&str] = &["wght", "wdth", "opsz", "ital", "slnt", "other"];
 
 pub fn meta(sfnt: &[u8]) -> Result<FontMeta, String> {
     let font = face_ref(sfnt, 0)?;
@@ -413,6 +426,8 @@ pub fn meta(sfnt: &[u8]) -> Result<FontMeta, String> {
         script: script(&font),
         category: category(&font),
         features: features(&font),
+        axes: axes(&font),
+        coverage: coverage(&chars(&font)),
         ps_name: name(&font, &[StringId::POSTSCRIPT_NAME]),
     })
 }
@@ -680,7 +695,62 @@ fn features(font: &FontRef) -> Vec<&'static str> {
     if font.attributes().style != skrifa::attribute::Style::Normal {
         out.push("italic");
     }
+    if is_color(font) {
+        out.push("color");
+    }
     out
+}
+
+/// Colour glyphs: COLR (vector, v0 / v1), SVG, or bitmaps in colour (CBDT, sbix).
+fn is_color(font: &FontRef) -> bool {
+    use skrifa::raw::types::Tag;
+    [b"COLR", b"SVG ", b"CBDT", b"sbix"].iter().any(|t| font.data_for_tag(Tag::new(t)).is_some())
+}
+
+/// Characters (code points, sorted and distinct) as ranges, each a pair of little-endian `u32`s
+/// (first, last): a few hundred bytes for most fonts, a few KB for Japanese ones.
+pub fn coverage(chars: &[u32]) -> Vec<u8> {
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < chars.len() {
+        let first = chars[i];
+        let mut last = first;
+        while i + 1 < chars.len() && chars[i + 1] == last + 1 {
+            i += 1;
+            last = chars[i];
+        }
+        out.extend_from_slice(&first.to_le_bytes());
+        out.extend_from_slice(&last.to_le_bytes());
+        i += 1;
+    }
+    out
+}
+
+/// Whether the font whose `coverage` this is maps every character of `text` (spaces and controls
+/// don't count; no characters at all = every font).
+pub fn covers(coverage: &[u8], text: &str) -> bool {
+    let ranges: Vec<(u32, u32)> = coverage
+        .chunks_exact(8)
+        .map(|c| (u32::from_le_bytes(c[..4].try_into().unwrap()), u32::from_le_bytes(c[4..].try_into().unwrap())))
+        .collect();
+    text.chars().filter(|c| !c.is_control() && !c.is_whitespace()).all(|c| {
+        let c = c as u32;
+        // The last range starting at or before `c` is the only one that can hold it.
+        let at = ranges.partition_point(|&(first, _)| first <= c);
+        at > 0 && ranges[at - 1].1 >= c
+    })
+}
+
+/// The variation axes of a variable font, in `AXES` order.
+fn axes(font: &FontRef) -> Vec<&'static str> {
+    let tags: Vec<[u8; 4]> = font.axes().iter().map(|a| a.tag().to_be_bytes()).collect();
+    AXES.iter()
+        .filter(|k| match **k {
+            "other" => tags.iter().any(|t| !AXES[..5].iter().any(|k| k.as_bytes() == t)),
+            k => tags.iter().any(|t| k.as_bytes() == t),
+        })
+        .copied()
+        .collect()
 }
 
 /// Every face, and the characters of face `index`.
@@ -897,6 +967,81 @@ pub mod tests {
         assert!(p.sample.chars().filter(|c| !c.is_whitespace()).count() >= 3);
     }
 
+    /// Colour fonts are told by their tables (skipped where no such font is installed).
+    #[test]
+    fn color_font_is_a_feature() {
+        let Some(emoji) = system_font(&[
+            "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf",
+            "/System/Library/Fonts/Apple Color Emoji.ttc",
+            "C:\\Windows\\Fonts\\seguiemj.ttf",
+        ]) else {
+            return;
+        };
+        let Ok(m) = meta(&emoji) else { return };
+        assert!(m.features.contains(&"color"), "features: {:?}", m.features);
+        let Some(plain) = system_font(SINGLE) else { return };
+        assert!(!meta(&plain).unwrap().features.contains(&"color"));
+    }
+
+    /// Reads every font under the usual folders and prints how long it took and what it found:
+    /// `cargo test --lib scan_installed_fonts -- --ignored --nocapture` (not part of the normal run).
+    #[test]
+    #[ignore]
+    fn scan_installed_fonts() {
+        let dirs = ["/usr/share/fonts", "/System/Library/Fonts", "/Library/Fonts", "C:\\Windows\\Fonts"];
+        let mut files = Vec::new();
+        let mut stack: Vec<std::path::PathBuf> = dirs.iter().map(Into::into).collect();
+        while let Some(d) = stack.pop() {
+            let Ok(rd) = std::fs::read_dir(&d) else { continue };
+            for e in rd.flatten() {
+                let p = e.path();
+                if p.is_dir() {
+                    stack.push(p);
+                } else if matches!(p.extension().and_then(|x| x.to_str()), Some("ttf" | "otf" | "ttc")) {
+                    files.push(p);
+                }
+            }
+        }
+        let start = std::time::Instant::now();
+        let (mut read, mut color, mut variable, mut bytes, mut biggest) = (0, 0, 0, 0usize, 0usize);
+        for f in &files {
+            let Ok(data) = std::fs::read(f) else { continue };
+            let Ok(m) = meta(&data) else { continue };
+            read += 1;
+            color += m.features.contains(&"color") as usize;
+            variable += !m.axes.is_empty() as usize;
+            bytes += m.coverage.len();
+            biggest = biggest.max(m.coverage.len());
+        }
+        println!(
+            "{read}/{} fonts read in {:?}: {color} colour, {variable} variable; coverage {bytes} bytes in all, {} on average, {biggest} at most",
+            files.len(),
+            start.elapsed(),
+            bytes / read.max(1)
+        );
+    }
+
+    #[test]
+    fn coverage_is_ranges_of_the_characters() {
+        let chars: Vec<u32> = "ABC永東"
+            .chars()
+            .map(|c| c as u32)
+            .chain([0x20, 0x21])
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        let cov = coverage(&chars);
+        assert_eq!(cov.len() % 8, 0);
+        assert_eq!(cov.len() / 8, 4, "0x20-0x21, A-C, 永, 東 (永 and 東 aren't next to each other)");
+        assert!(covers(&cov, "AB永"));
+        assert!(covers(&cov, "  \n"), "spaces and controls don't count");
+        assert!(covers(&cov, ""), "nothing asked: every font");
+        assert!(!covers(&cov, "AD"), "D is just past the range");
+        assert!(!covers(&cov, "鬱"));
+        assert!(!covers(&[], "A"), "a font that maps nothing");
+        assert!(covers(&[], ""));
+    }
+
     #[test]
     fn variable_font() {
         let Some(ttf) = system_font(VARIABLE) else { return };
@@ -905,11 +1050,17 @@ pub mod tests {
         assert!(wght.min < wght.default && wght.default <= wght.max);
         let m = meta(&ttf).unwrap();
         assert!(m.features.contains(&"variable"));
+        assert!(m.axes.contains(&"wght"), "axes: {:?}", m.axes);
         assert_eq!((m.weight_min, m.weight_max), (wght.min.round() as u32, wght.max.round() as u32));
         assert!(face.instances.len() >= 2, "named styles: {:?}", face.instances);
         // A plain font has neither.
         let Some(plain) = system_font(SINGLE) else { return };
         assert!(faces(&plain).unwrap()[0].axes.is_empty());
+        assert!(meta(&plain).unwrap().axes.is_empty());
+        // The coverage holds what the font maps, and nothing else.
+        let cov = meta(&plain).unwrap().coverage;
+        assert!(covers(&cov, "Aa 0"), "Latin");
+        assert!(!covers(&cov, "A\u{10FFFD}"), "a private-use character it doesn't map");
     }
 
     #[test]

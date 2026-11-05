@@ -24,6 +24,8 @@ export const SIDEBAR_ENTRIES: { id: string; label: string }[] = [
   { id: "system", label: "この端末のフォント" },
   { id: "favorites", label: "お気に入り" },
   { id: "pinned", label: "ピン留め" },
+  { id: "section:scripts", label: "言語" },
+  { id: "section:categories", label: "書体" },
   { id: "section:folders", label: "フォルダ" },
   { id: "section:smart", label: "スマートフォルダ" },
   { id: "section:tags", label: "タグ" },

@@ -394,6 +394,13 @@ const ALL_COMMANDS: Command[] = [
   },
   { id: "folder.new", title: "新しいフォルダ", keys: ["Mod+Shift+N"], run: () => void createFolderHere() },
   {
+    id: "tag.new",
+    title: "新しいタグ",
+    // The sidebar's ＋ on 「タグ」: a row to type the name in (the tags section opens if folded).
+    enabled: library,
+    run: (s) => s.setCreatingTag(true),
+  },
+  {
     id: "smart.new",
     title: "新しいスマートフォルダ",
     keys: ["Mod+Shift+Alt+N"],

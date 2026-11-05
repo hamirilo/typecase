@@ -25,7 +25,7 @@ pub const ID_PREFIX: &str = "sys:";
 const MAX_FILE: u64 = 256 << 20;
 
 /// Bumped when what is read from a font changes, so the cache is read again.
-const CACHE_VERSION: u32 = 2;
+const CACHE_VERSION: u32 = 3;
 const CACHE_FILE: &str = "system-fonts.json";
 
 /// One font file installed on this computer (a collection is one entry, like
@@ -55,6 +55,9 @@ pub struct SystemFont {
     pub script: String,
     pub category: Option<String>,
     pub features: Vec<String>,
+    /// Variation axes (`fonts::AXES`), empty unless variable.
+    #[serde(default)]
+    pub axes: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -142,7 +145,7 @@ fn read_font(path: &Path, size: u64, modified: i64) -> Option<SystemFont> {
         return None;
     }
     let sfnt = to_sfnt(&std::fs::read(path).ok()?, &ext).ok()?;
-    let FontMeta { family, weight, weight_min, weight_max, script, category, features, ps_name } = meta(&sfnt).ok()?;
+    let FontMeta { family, weight, weight_min, weight_max, script, category, features, axes, ps_name, .. } = meta(&sfnt).ok()?;
     let name = super::faces(&sfnt).ok()?.into_iter().next().map(|f| f.full_name).unwrap_or_default();
     let file_name = path.file_name()?.to_string_lossy().into_owned();
     Some(SystemFont {
@@ -162,6 +165,7 @@ fn read_font(path: &Path, size: u64, modified: i64) -> Option<SystemFont> {
         script: script.to_string(),
         category: category.map(str::to_string),
         features: features.into_iter().map(str::to_string).collect(),
+        axes: axes.into_iter().map(str::to_string).collect(),
     })
 }
 
@@ -281,6 +285,7 @@ mod tests {
             script: "latin".into(),
             category: None,
             features: vec!["mono".into()],
+            axes: vec![],
         }
     }
 

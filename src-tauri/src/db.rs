@@ -10,7 +10,7 @@ use crate::search;
 
 pub type DbResult<T> = rusqlite::Result<T>;
 
-const SCHEMA_VERSION: i32 = 1;
+const SCHEMA_VERSION: i32 = 3;
 
 pub fn now_ms() -> i64 {
     SystemTime::now()
@@ -37,6 +37,7 @@ pub fn open(path: &std::path::Path) -> DbResult<Connection> {
 /// instead of trusting the number. Each step runs in its own transaction and
 /// records its version, and the version is never lowered here.
 pub fn migrate(conn: &Connection) -> DbResult<()> {
+    register_functions(conn)?;
     let version: i32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
     let step = |target: i32, f: &dyn Fn(&Connection) -> DbResult<()>| -> DbResult<()> {
         if version >= target {
@@ -143,6 +144,27 @@ pub fn migrate(conn: &Connection) -> DbResult<()> {
              CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);",
         )
     })?;
+    // 2: the variation axes of each font (a NULL one is read again, with the
+    //    colour-font feature added at the same time: `missing_font_meta`).
+    step(2, &|c| {
+        let has: bool = c
+            .prepare("SELECT 1 FROM pragma_table_info('items') WHERE name = 'font_axes'")?
+            .exists([])?;
+        if !has {
+            c.execute_batch("ALTER TABLE items ADD COLUMN font_axes TEXT")?;
+        }
+        Ok(())
+    })?;
+    // 3: the characters each font maps (`fonts::coverage`; a NULL one is read again).
+    step(3, &|c| {
+        let has: bool = c
+            .prepare("SELECT 1 FROM pragma_table_info('items') WHERE name = 'font_chars'")?
+            .exists([])?;
+        if !has {
+            c.execute_batch("ALTER TABLE items ADD COLUMN font_chars BLOB")?;
+        }
+        Ok(())
+    })?;
     // New steps go above; the last one must be SCHEMA_VERSION.
     debug_assert!(
         conn.query_row("PRAGMA user_version", [], |r| r.get::<_, i32>(0))? >= SCHEMA_VERSION,
@@ -220,6 +242,10 @@ pub enum View {
     Smart { id: String },
     /// Items carrying a tag: the sidebar's tags are places like folders (docs/NAVIGATION.md).
     Tag { id: i64 },
+    /// Fonts of one writing system (`fonts::SCRIPTS`): a place in the sidebar (docs/NAVIGATION.md).
+    FontScript { id: String },
+    /// Fonts of one typeface style (`fonts::CATEGORIES`, or "none" = unknown): a place in the sidebar.
+    FontCategory { id: String },
 }
 
 /// Attribute filters (the filter row). Empty / None = no restriction.
@@ -233,6 +259,13 @@ pub struct Filter {
     /// these features (`fonts::FEATURES`).
     pub font_weights: Vec<String>,
     pub font_features: Vec<String>,
+    /// Variable fonts with any of these axes (`fonts::AXES`).
+    pub font_axes: Vec<String>,
+    /// Fonts of families with this many styles (`FONT_STYLES`): "1", "2-3", "4-8", "9+", or
+    /// "wide" (the family runs from light to bold).
+    pub font_styles: Vec<String>,
+    /// Fonts that map every one of these characters (spaces don't count); "" = no restriction.
+    pub font_chars: String,
     /// File types, e.g. "otf".
     pub exts: Vec<String>,
     /// Import time range in ms; `after` inclusive, `before` exclusive.
@@ -391,6 +424,50 @@ fn font_weight_where(key: &str) -> String {
     }
 }
 
+/// SQL functions of the queries: `covers(coverage, text)`, whether a font's coverage
+/// (`items.font_chars`) holds every character of `text` (a font not read yet holds none).
+fn register_functions(conn: &Connection) -> DbResult<()> {
+    use rusqlite::functions::FunctionFlags;
+    conn.create_scalar_function("covers", 2, FunctionFlags::SQLITE_UTF8 | FunctionFlags::SQLITE_DETERMINISTIC, |ctx| {
+        let text: String = ctx.get(1)?;
+        Ok(match ctx.get_raw(0) {
+            rusqlite::types::ValueRef::Blob(b) => crate::fonts::covers(b, &text),
+            _ => false,
+        })
+    })
+}
+
+/// How many styles a family has: its fonts in the library (a font with no family counts as one).
+const FAMILY_STYLES: &str = "MAX(1, (SELECT COUNT(*) FROM items s
+       WHERE s.deleted_at IS NULL AND s.font_family = items.font_family))";
+
+/// Style-count buckets of a family, and "wide": from 300 or lighter to 700 or bolder.
+pub const FONT_STYLES: &[&str] = &["1", "2-3", "4-8", "9+", "wide"];
+
+/// SQL: the font's family is of the named bucket of `FONT_STYLES` (false for unknown names).
+fn font_styles_where(key: &str) -> String {
+    match key {
+        "1" => format!("({FAMILY_STYLES} = 1)"),
+        "2-3" => format!("({FAMILY_STYLES} BETWEEN 2 AND 3)"),
+        "4-8" => format!("({FAMILY_STYLES} BETWEEN 4 AND 8)"),
+        "9+" => format!("({FAMILY_STYLES} >= 9)"),
+        "wide" => "((SELECT MIN(COALESCE(s.font_weight_min, s.font_weight)) FROM items s
+               WHERE s.deleted_at IS NULL AND s.font_family = items.font_family) <= 300
+             AND (SELECT MAX(COALESCE(s.font_weight_max, s.font_weight)) FROM items s
+               WHERE s.deleted_at IS NULL AND s.font_family = items.font_family) >= 700)"
+            .into(),
+        _ => "0".into(),
+    }
+}
+
+/// SQL: the font has the axis (an argument `?`, matched as a whole word).
+const FONT_AXIS_WHERE: &str = "instr(',' || IFNULL(items.font_axes, '') || ',', ',' || ? || ',') > 0";
+
+/// SQL: the font has the axis `k` (one of `fonts::AXES`).
+fn font_axis_term(k: &str) -> String {
+    format!("instr(',' || IFNULL(items.font_axes, '') || ',', ',{k},') > 0")
+}
+
 /// SQL: the font has the feature (an argument `?`, matched as a whole word).
 const FONT_FEATURE_WHERE: &str = "instr(',' || IFNULL(items.font_features, '') || ',', ',' || ? || ',') > 0";
 
@@ -452,6 +529,19 @@ fn push_rule(rule: &Rule, wheres: &mut Vec<String>, args: &mut Vec<Box<dyn ToSql
         wheres.push(format!("({})", has.join(" OR ")));
         args.extend(f.font_features.iter().map(|v| Box::new(v.clone()) as Box<dyn ToSql>));
     }
+    if !f.font_axes.is_empty() {
+        let has: Vec<&str> = f.font_axes.iter().map(|_| FONT_AXIS_WHERE).collect();
+        wheres.push(format!("({})", has.join(" OR ")));
+        args.extend(f.font_axes.iter().map(|v| Box::new(v.clone()) as Box<dyn ToSql>));
+    }
+    if !f.font_chars.trim().is_empty() {
+        wheres.push("covers(items.font_chars, ?)".into());
+        args.push(Box::new(f.font_chars.clone()));
+    }
+    if !f.font_styles.is_empty() {
+        let any: Vec<String> = f.font_styles.iter().map(|k| font_styles_where(k)).collect();
+        wheres.push(format!("({})", any.join(" OR ")));
+    }
     if !f.exts.is_empty() {
         let exts: Vec<String> = f.exts.iter().map(|e| canonical_ext(e)).collect();
         wheres.push(format!("lower(items.ext) IN ({})", placeholders(exts.len())));
@@ -509,6 +599,14 @@ fn query_where(conn: &Connection, q: &ItemQuery) -> DbResult<(Vec<String>, Vec<B
         View::Tag { id } => {
             wheres.push("EXISTS (SELECT 1 FROM item_tags t WHERE t.item_id = items.id AND t.tag_id = ?)".into());
             args.push(Box::new(*id));
+        }
+        View::FontScript { id } => {
+            wheres.push("items.font_script = ?".into());
+            args.push(Box::new(id.clone()));
+        }
+        View::FontCategory { id } => {
+            wheres.push(format!("{FONT_CATEGORY} = ?"));
+            args.push(Box::new(id.clone()));
         }
         View::All | View::Trash | View::Smart { .. } => {}
     }
@@ -586,6 +684,9 @@ pub struct Facets {
     pub font_categories: BTreeMap<String, i64>,
     pub font_weights: BTreeMap<String, i64>,
     pub font_features: BTreeMap<String, i64>,
+    /// ... by variation axis (`fonts::AXES`) and by family size (`FONT_STYLES`).
+    pub font_axes: BTreeMap<String, i64>,
+    pub font_styles: BTreeMap<String, i64>,
 }
 
 pub fn facet_counts(conn: &Connection, q: &ItemQuery) -> DbResult<Facets> {
@@ -648,13 +749,17 @@ pub fn facet_counts(conn: &Connection, q: &ItemQuery) -> DbResult<Facets> {
     let features: Vec<(String, String)> =
         crate::fonts::FEATURES.iter().map(|k| (k.to_string(), font_feature_term(k))).collect();
     f.font_features = sums(&features)?;
+    let axes: Vec<(String, String)> = crate::fonts::AXES.iter().map(|k| (k.to_string(), font_axis_term(k))).collect();
+    f.font_axes = sums(&axes)?;
+    let styles: Vec<(String, String)> = FONT_STYLES.iter().map(|k| (k.to_string(), font_styles_where(k))).collect();
+    f.font_styles = sums(&styles)?;
     Ok(f)
 }
 
 /// Fonts whose details haven't been read yet, trash included: (id, file name, extension).
 pub fn missing_font_meta(conn: &Connection) -> DbResult<Vec<(String, String, String)>> {
     let mut stmt =
-        conn.prepare("SELECT id, file_name, lower(ext) FROM items WHERE font_script IS NULL OR font_features IS NULL")?;
+        conn.prepare("SELECT id, file_name, lower(ext) FROM items WHERE font_script IS NULL OR font_features IS NULL OR font_axes IS NULL OR font_chars IS NULL")?;
     let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
     rows.collect()
 }
@@ -664,7 +769,7 @@ pub fn set_font_meta(conn: &mut Connection, metas: &[(String, crate::fonts::Font
     {
         let mut stmt = tx.prepare(
             "UPDATE items SET font_family = ?2, font_weight = ?3, font_script = ?4, font_category = ?5,
-               font_weight_min = ?6, font_weight_max = ?7, font_features = ?8, font_ps_name = ?9 WHERE id = ?1",
+               font_weight_min = ?6, font_weight_max = ?7, font_features = ?8, font_ps_name = ?9, font_axes = ?10, font_chars = ?11 WHERE id = ?1",
         )?;
         for (id, m) in metas {
             stmt.execute(params![
@@ -676,7 +781,9 @@ pub fn set_font_meta(conn: &mut Connection, metas: &[(String, crate::fonts::Font
                 m.weight_min,
                 m.weight_max,
                 m.features_text(),
-                m.ps_name
+                m.ps_name,
+                m.axes_text(),
+                m.coverage
             ])?;
         }
     }
@@ -730,8 +837,8 @@ pub fn insert_item(tx: &Transaction, it: &NewItem, imported_at: i64) -> DbResult
     tx.execute(
         "INSERT INTO items (id, name, file_name, ext, size, hash, thumb, imported_at,
            font_family, font_weight, font_script, font_category, font_weight_min, font_weight_max, font_features,
-           font_ps_name)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+           font_ps_name, font_axes, font_chars)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
         params![
             it.id,
             it.name,
@@ -748,7 +855,9 @@ pub fn insert_item(tx: &Transaction, it: &NewItem, imported_at: i64) -> DbResult
             f.weight_min,
             f.weight_max,
             f.features_text(),
-            f.ps_name
+            f.ps_name,
+            f.axes_text(),
+            f.coverage
         ],
     )?;
     Ok(())
@@ -1421,6 +1530,16 @@ pub fn set_color(conn: &Connection, target: ColorTarget, id: &dyn ToSql, color: 
 pub(crate) fn ensure_tag(conn: &Connection, name: &str) -> DbResult<i64> {
     conn.execute("INSERT OR IGNORE INTO tags (name) VALUES (?1)", [name])?;
     conn.query_row("SELECT id FROM tags WHERE name = ?1", [name], |r| r.get(0))
+}
+
+/// Makes the tag `name` (the sidebar's ＋): the existing one if the name is taken. Empty names make none.
+pub fn create_tag(conn: &Connection, name: &str) -> DbResult<Option<Tag>> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Ok(None);
+    }
+    let id = ensure_tag(conn, name)?;
+    list_tags(conn).map(|tags| tags.into_iter().find(|t| t.id == id))
 }
 
 /// Tags items by name (tags are made where missing).

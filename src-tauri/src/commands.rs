@@ -905,6 +905,11 @@ pub fn list_tags(state: State<AppState>) -> CmdResult<Vec<Tag>> {
 }
 
 #[tauri::command]
+pub fn create_tag(state: State<AppState>, name: String) -> CmdResult<Option<Tag>> {
+    with_lib(&state, |lib| db::create_tag(&lib.conn, &name).map_err(err))
+}
+
+#[tauri::command]
 pub fn add_tags(state: State<AppState>, ids: Vec<String>, names: Vec<String>) -> CmdResult<()> {
     with_lib(&state, |lib| db::add_tags(&mut lib.conn, &ids, &names).map_err(err))
 }

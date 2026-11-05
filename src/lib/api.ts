@@ -97,12 +97,34 @@ export const FONT_FEATURES: { key: string; label: string }[] = [
   { key: "coding", label: "プログラミング向け" },
   { key: "variable", label: "可変フォント" },
   { key: "italic", label: "イタリック・斜体" },
+  { key: "color", label: "カラーフォント" },
+];
+
+/** Variation axes of variable fonts (fonts.rs `AXES`); "other" = any a font has of its own. */
+export const FONT_AXES: { key: string; label: string; tag?: string }[] = [
+  { key: "wght", label: "太さ", tag: "wght" },
+  { key: "wdth", label: "幅", tag: "wdth" },
+  { key: "opsz", label: "光学サイズ", tag: "opsz" },
+  { key: "ital", label: "イタリック", tag: "ital" },
+  { key: "slnt", label: "斜体の角度", tag: "slnt" },
+  { key: "other", label: "そのほかの軸" },
+];
+
+/** How many styles a font's family has (db.rs `FONT_STYLES`); "wide" = from light to bold. */
+export const FONT_STYLES: { key: string; label: string; names?: string }[] = [
+  { key: "1", label: "1 スタイル" },
+  { key: "2-3", label: "2〜3 スタイル" },
+  { key: "4-8", label: "4〜8 スタイル" },
+  { key: "9+", label: "9 スタイル以上" },
+  { key: "wide", label: "細〜太をそろえる", names: "Light 以下〜Bold 以上" },
 ];
 
 export const fontScriptLabel = (k: string) => FONT_SCRIPTS.find((x) => x.key === k)?.label ?? k;
 export const fontCategoryLabel = (k: string) => FONT_CATEGORIES.find((x) => x.key === k)?.label ?? k;
 export const fontWeightLabel = (k: string) => FONT_WEIGHTS.find((x) => x.key === k)?.label ?? k;
 export const fontFeatureLabel = (k: string) => FONT_FEATURES.find((x) => x.key === k)?.label ?? k;
+export const fontAxisLabel = (k: string) => FONT_AXES.find((x) => x.key === k)?.label ?? k;
+export const fontStyleLabel = (k: string) => FONT_STYLES.find((x) => x.key === k)?.label ?? k;
 
 /** A font's typeface style: the user's choice, else the guess, else "none". */
 export const fontCategoryOf = (item: Pick<Item, "fontCategory" | "fontCategoryUser">) =>
@@ -168,6 +190,9 @@ export type View =
   | { kind: "smart"; id: string }
   /** Items carrying a tag: the sidebar's tags are places like folders (docs/NAVIGATION.md). */
   | { kind: "tag"; id: number }
+  /** Fonts of one writing system / typeface style (FONT_SCRIPTS / FONT_CATEGORIES keys): places in the sidebar. */
+  | { kind: "fontScript"; id: string }
+  | { kind: "fontCategory"; id: string }
   /**
    * The fonts installed on this computer, read only and not in the library
    * (docs/SYSTEM_FONTS.md). Never sent to Rust: features/fonts/system.ts lists them.
@@ -181,6 +206,11 @@ export interface Filter {
   fontCategories: string[];
   fontWeights: string[];
   fontFeatures: string[];
+  /** Variable fonts with any of these axes / fonts of families this size. */
+  fontAxes: string[];
+  fontStyles: string[];
+  /** Fonts that map every one of these characters ("" = no restriction; spaces don't count). */
+  fontChars: string;
   exts: string[];
   /** ms; after inclusive, before exclusive. */
   importedAfter: number | null;
@@ -195,6 +225,9 @@ export const EMPTY_FILTER: Filter = {
   fontCategories: [],
   fontWeights: [],
   fontFeatures: [],
+  fontAxes: [],
+  fontStyles: [],
+  fontChars: "",
   exts: [],
   importedAfter: null,
   importedBefore: null,
@@ -249,6 +282,8 @@ export interface Facets {
   fontCategories: Record<string, number>;
   fontWeights: Record<string, number>;
   fontFeatures: Record<string, number>;
+  fontAxes: Record<string, number>;
+  fontStyles: Record<string, number>;
 }
 
 export interface Counts {
@@ -391,6 +426,8 @@ export const api = {
     invoke<void>("remove_from_folder", { ids, folderId }),
 
   listTags: () => invoke<Tag[]>("list_tags"),
+  /** An empty tag (the sidebar's ＋); the existing one when the name is taken, null for an empty name. */
+  createTag: (name: string) => invoke<Tag | null>("create_tag", { name }),
   /** Tags are made where missing. */
   addTags: (ids: string[], names: string[]) => invoke<void>("add_tags", { ids, names }),
   removeTag: (ids: string[], tagId: number) => invoke<void>("remove_tag", { ids, tagId }),

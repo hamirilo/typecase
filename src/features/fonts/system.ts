@@ -65,6 +65,33 @@ export function systemItem(f: SystemFont): Item {
   };
 }
 
+/** What a family is made of: its fonts and the weights they span (db.rs `FAMILY_STYLES`, "wide"). */
+type Families = Map<string, { n: number; lo: number; hi: number }>;
+const familiesOf = new WeakMap<SystemFont[], Families>();
+function families(all: SystemFont[]): Families {
+  let m = familiesOf.get(all);
+  if (!m) {
+    m = new Map();
+    for (const f of all) {
+      const e = m.get(f.family) ?? { n: 0, lo: Infinity, hi: 0 };
+      m.set(f.family, { n: e.n + 1, lo: Math.min(e.lo, f.weightMin), hi: Math.max(e.hi, f.weightMax) });
+    }
+    familiesOf.set(all, m);
+  }
+  return m;
+}
+
+/** The style-count values (lib/api.ts `FONT_STYLES`) a font's family is in; a font with no family is a family of one. */
+function styleKeys(f: SystemFont, fam: Families): string[] {
+  const e = f.family ? fam.get(f.family) : undefined;
+  const n = e?.n ?? 1;
+  const out = [n === 1 ? "1" : n <= 3 ? "2-3" : n <= 8 ? "4-8" : "9+"];
+  if (e && e.lo <= 300 && e.hi >= 700) out.push("wide");
+  return out;
+}
+
+const axesOf = (f: SystemFont) => f.axes ?? [];
+
 const inWeight = (f: SystemFont, key: string) => {
   const r = WEIGHT_RANGES[key];
   return !!r && f.weightMin <= r[1] && f.weightMax >= r[0];
@@ -87,10 +114,18 @@ function searchTerms(search: string): { has: string[]; not: string[] } {
   return { has, not };
 }
 
-type Condition = "search" | "fontScripts" | "fontCategories" | "fontWeights" | "fontFeatures" | "exts";
+type Condition =
+  | "search"
+  | "fontScripts"
+  | "fontCategories"
+  | "fontWeights"
+  | "fontStyles"
+  | "fontFeatures"
+  | "fontAxes"
+  | "exts";
 
 /** Whether `f` meets the query's conditions, `without` one of them (for that condition's counts). */
-function matches(f: SystemFont, q: ItemQuery, without?: Condition): boolean {
+function matches(f: SystemFont, q: ItemQuery, fam: Families, without?: Condition): boolean {
   const c = q.filter;
   const on = (k: Condition) => k !== without;
   if (on("search")) {
@@ -101,7 +136,9 @@ function matches(f: SystemFont, q: ItemQuery, without?: Condition): boolean {
   if (on("fontScripts") && c.fontScripts.length && !c.fontScripts.includes(f.script)) return false;
   if (on("fontCategories") && c.fontCategories.length && !c.fontCategories.includes(f.category ?? "none")) return false;
   if (on("fontWeights") && c.fontWeights.length && !c.fontWeights.some((k) => inWeight(f, k))) return false;
+  if (on("fontStyles") && c.fontStyles.length && !c.fontStyles.some((k) => styleKeys(f, fam).includes(k))) return false;
   if (on("fontFeatures") && c.fontFeatures.length && !c.fontFeatures.some((k) => f.features.includes(k))) return false;
+  if (on("fontAxes") && c.fontAxes.length && !c.fontAxes.some((k) => axesOf(f).includes(k))) return false;
   if (on("exts") && c.exts.length && !c.exts.includes(f.ext)) return false;
   if ((c.minSize != null && f.size < c.minSize) || (c.maxSize != null && f.size > c.maxSize)) return false;
   return true;
@@ -127,8 +164,9 @@ function sorter(q: ItemQuery): (a: SystemFont, b: SystemFont) => number {
 /** The installed fonts meeting `q` (its view, rating and tags don't apply), sorted as asked. */
 export async function querySystemFonts(q: ItemQuery): Promise<Item[]> {
   const all = await systemFonts();
+  const fam = families(all);
   return all
-    .filter((f) => matches(f, q))
+    .filter((f) => matches(f, q, fam))
     .sort(sorter(q))
     .map(systemItem);
 }
@@ -136,10 +174,11 @@ export async function querySystemFonts(q: ItemQuery): Promise<Item[]> {
 /** The filter row's counts for the installed fonts (db.rs `facet_counts`), each condition left out of its own. */
 export async function systemFacetCounts(q: ItemQuery): Promise<Facets> {
   const all = await systemFonts();
+  const fam = families(all);
   const count = (without: Condition, keys: (f: SystemFont) => string[]) => {
     const out: Record<string, number> = {};
     for (const f of all) {
-      if (!matches(f, q, without)) continue;
+      if (!matches(f, q, fam, without)) continue;
       for (const k of keys(f)) out[k] = (out[k] ?? 0) + 1;
     }
     return out;
@@ -153,6 +192,8 @@ export async function systemFacetCounts(q: ItemQuery): Promise<Facets> {
     fontCategories: count("fontCategories", (f) => [f.category ?? "none"]),
     fontWeights: count("fontWeights", (f) => Object.keys(WEIGHT_RANGES).filter((k) => inWeight(f, k))),
     fontFeatures: count("fontFeatures", (f) => f.features),
+    fontAxes: count("fontAxes", axesOf),
+    fontStyles: count("fontStyles", (f) => styleKeys(f, fam)),
   };
 }
 
@@ -187,6 +228,7 @@ function unavailableItem(id: string, name: string): Item {
       script: "",
       category: null,
       features: [],
+      axes: [],
     }),
     fontScript: null,
     unavailable: true,

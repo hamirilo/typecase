@@ -177,6 +177,7 @@ pub fn run() {
             move_to_folder,
             remove_from_folder,
             list_tags,
+            create_tag,
             add_tags,
             remove_tag,
             rename_tag,
