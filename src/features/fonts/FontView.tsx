@@ -78,7 +78,7 @@ export function FontView({ item }: { item: Item }) {
             <select
               value={face}
               onChange={(e) => setFace(Number(e.target.value))}
-              className="ml-auto rounded-md border border-ink/15 bg-black/40 px-2 py-1 text-sm outline-none focus:border-accent"
+              className="ml-auto rounded-md border border-ink/15 bg-field px-2 py-1 text-sm outline-none focus:border-accent"
               title={`このファイルには ${info.faces.length} 個のフォントが入っています`}
             >
               {info.faces.map((f, i) => (
@@ -101,7 +101,7 @@ export function FontView({ item }: { item: Item }) {
             value={text}
             onChange={(e) => setText(e.target.value)}
             placeholder="テキストを入力して試す"
-            className="min-w-60 flex-1 rounded-md border border-ink/15 bg-black/40 px-3 py-1.5 text-sm outline-none focus:border-accent"
+            className="min-w-60 flex-1 rounded-md border border-ink/15 bg-field px-3 py-1.5 text-sm outline-none focus:border-accent"
           />
           <label className="flex items-center gap-2 text-xs text-ink/55">
             <Slider
