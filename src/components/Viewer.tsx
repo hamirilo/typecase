@@ -126,25 +126,25 @@ export function Viewer() {
 
   if (!item || index === null) return null;
   const nav =
-    "absolute top-1/2 -translate-y-1/2 rounded-full bg-black/40 p-2 text-white/80 hover:bg-black/70 hover:text-white disabled:invisible";
-  const tool = "rounded p-1 text-white/70 hover:bg-white/10 hover:text-white";
-  const toggle = (on: boolean) => `${tool} ${on ? "bg-white/10 text-accent hover:text-accent" : ""}`;
+    "keep-dark absolute top-1/2 -translate-y-1/2 rounded-full bg-black/40 p-2 text-white/80 hover:bg-black/70 hover:text-white disabled:invisible";
+  const tool = "rounded p-1 text-ink/70 hover:bg-ink/10 hover:text-ink";
+  const toggle = (on: boolean) => `${tool} ${on ? "bg-ink/10 text-accent hover:text-accent" : ""}`;
 
   return (
-    <div className={`fixed inset-0 z-40 keep-dark flex animate-fade-in flex-col bg-black`}>
+    <div className={`fixed inset-0 z-40 flex animate-fade-in flex-col bg-stage text-fg`}>
       {!bare && (
         <div
           {...dragRegion(true)}
-          className="flex items-center gap-3 px-4 py-2 text-sm text-white/80"
+          className="flex items-center gap-3 px-4 py-2 text-sm text-ink/80"
           // The macOS window buttons are over the top left, centred on this bar
           // as on the toolbar (48px tall).
           style={{ paddingLeft: "max(1rem, var(--traffic-lights))", minHeight: "calc(var(--titlebar) + 8px)" }}
         >
           <span className="min-w-0 flex-1 truncate">
             {item.fontFamily ?? item.name}
-            {item.fontFamily && <span className="ml-2 text-xs text-white/40">{item.name}</span>}
+            {item.fontFamily && <span className="ml-2 text-xs text-ink/40">{item.name}</span>}
           </span>
-          <span className="tabular-nums text-white/50">
+          <span className="tabular-nums text-ink/50">
             {index + 1} / {items.length}
           </span>
           <div className="flex items-center gap-1">
@@ -158,7 +158,7 @@ export function Viewer() {
               <Focus size={16} />
             </button>
           </div>
-          <button className="rounded p-1 hover:bg-white/10" onClick={() => openViewer(null)}>
+          <button className="rounded p-1 hover:bg-ink/10" onClick={() => openViewer(null)}>
             <X size={18} />
           </button>
         </div>
@@ -184,7 +184,7 @@ export function Viewer() {
             <div
               key={hint}
               role="status"
-              className="pointer-events-none absolute top-4 left-1/2 -translate-x-1/2 animate-hud rounded-full border border-white/10 bg-black/80 px-4 py-2 text-sm whitespace-nowrap text-white/90 shadow-2xl shadow-black/50 backdrop-blur"
+              className="keep-dark pointer-events-none absolute top-4 left-1/2 -translate-x-1/2 animate-hud rounded-full border border-white/10 bg-black/80 px-4 py-2 text-sm whitespace-nowrap text-white/90 shadow-2xl shadow-black/50 backdrop-blur"
               style={{ animationDuration: `${HINT_MS}ms` }}
             >
               H か右上のボタンで操作と情報を表示
@@ -201,7 +201,7 @@ export function Viewer() {
           style={{ minHeight: "calc(var(--titlebar) + 8px)" }}
         >
           <button
-            className={`pointer-events-auto flex items-center gap-1.5 rounded-full border border-white/10 bg-black/70 px-3 py-1 text-xs text-white/85 shadow-2xl shadow-black/50 backdrop-blur transition-opacity duration-300 hover:bg-black/90 hover:text-white ${
+            className={`keep-dark pointer-events-auto flex items-center gap-1.5 rounded-full border border-white/10 bg-black/70 px-3 py-1 text-xs text-white/85 shadow-2xl shadow-black/50 backdrop-blur transition-opacity duration-300 hover:bg-black/90 hover:text-white ${
               peek || hint > 0 ? "opacity-100" : "opacity-0 hover:opacity-100"
             }`}
             title="操作と情報を表示（H）"
@@ -231,38 +231,38 @@ function Details({ item, items }: { item: Item; items: Item[] }) {
     () => (item.folderId ? folderPaths(folders).find((f) => f.folder.id === item.folderId) : undefined),
     [folders, item.folderId],
   );
-  const label = "mb-1.5 text-[11px] font-semibold text-white/45";
+  const label = "mb-1.5 text-[11px] font-semibold text-ink/45";
   // Installed fonts: their details only, nothing to rate or tag (docs/SYSTEM_FONTS.md).
   const system = isSystemId(item.id);
   return (
-    <aside className="flex w-72 shrink-0 flex-col gap-4 overflow-y-auto border-l border-white/10 bg-black/40 p-4 text-sm text-white/85 animate-fade-in">
+    <aside className="flex w-72 shrink-0 flex-col gap-4 overflow-y-auto border-l border-ink/10 bg-ink/5 p-4 text-sm text-ink/85 animate-fade-in">
       <div>
         <div className="font-semibold break-words" title={item.fileName}>
           {item.name}
         </div>
-        <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs text-white/70">
+        <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs text-ink/70">
           {item.fontFamily && (
             <>
-              <dt className="text-white/45">ファミリー</dt>
+              <dt className="text-ink/45">ファミリー</dt>
               <dd>{item.fontFamily}</dd>
             </>
           )}
-          <dt className="text-white/45">形式</dt>
+          <dt className="text-ink/45">形式</dt>
           <dd>
             {item.ext.toUpperCase()} · {formatBytes(item.size)}
           </dd>
-          <dt className="text-white/45">{system ? "更新日" : "追加日"}</dt>
+          <dt className="text-ink/45">{system ? "更新日" : "追加日"}</dt>
           <dd>{new Date(item.importedAt).toLocaleString("ja-JP")}</dd>
           {system && (
             <>
-              <dt className="text-white/45">場所</dt>
+              <dt className="text-ink/45">場所</dt>
               <dd className="break-all">{item.filePath}</dd>
             </>
           )}
         </dl>
       </div>
       {system ? (
-        <p className="text-xs leading-5 text-white/55">
+        <p className="text-xs leading-5 text-ink/55">
           この端末にインストールされているフォントです。読み取り専用で、評価・タグ・フォルダ・メモはライブラリのフォントだけに使えます。
         </p>
       ) : (
@@ -277,7 +277,7 @@ function Details({ item, items }: { item: Item; items: Item[] }) {
           <div>
             <div className={label}>タグ</div>
             {itemTags.length === 0 ? (
-              <span className="text-xs text-white/45">なし</span>
+              <span className="text-xs text-ink/45">なし</span>
             ) : (
               <div className="flex flex-wrap gap-1.5">
                 {itemTags.map((t) => {
@@ -285,7 +285,7 @@ function Details({ item, items }: { item: Item; items: Item[] }) {
                   return (
                     <span
                       key={t.id}
-                      className="flex max-w-full items-center gap-1.5 rounded-full bg-white/10 px-2.5 py-0.5 text-xs"
+                      className="flex max-w-full items-center gap-1.5 rounded-full bg-ink/10 px-2.5 py-0.5 text-xs"
                     >
                       {hex && <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: hex }} />}
                       <span className="truncate">{t.name}</span>
@@ -299,24 +299,24 @@ function Details({ item, items }: { item: Item; items: Item[] }) {
             <div className={label}>フォルダ</div>
             {folder ? (
               <span className="flex items-center gap-1.5 text-xs">
-                <FolderIcon size={12} className="shrink-0 text-white/45" />
+                <FolderIcon size={12} className="shrink-0 text-ink/45" />
                 <span className="truncate">{folder.path}</span>
               </span>
             ) : (
-              <span className="text-xs text-white/45">未分類</span>
+              <span className="text-xs text-ink/45">未分類</span>
             )}
           </div>
           <div>
             <div className={label}>メモ</div>
             {item.note.trim() ? (
-              <p className="text-xs whitespace-pre-wrap text-white/75">{item.note}</p>
+              <p className="text-xs whitespace-pre-wrap text-ink/75">{item.note}</p>
             ) : (
-              <span className="text-xs text-white/45">なし</span>
+              <span className="text-xs text-ink/45">なし</span>
             )}
           </div>
         </>
       )}
-      <p className="mt-auto pt-2 text-[11px] leading-5 text-white/35">
+      <p className="mt-auto pt-2 text-[11px] leading-5 text-ink/35">
         {!system && (
           <>
             1〜5 で評価、0 で解除、Shift+数字で評価して次へ
@@ -364,7 +364,7 @@ function Strip({ items, index, onPick }: { items: Item[]; index: number; onPick:
   return (
     <div
       ref={ref}
-      className="relative shrink-0 overflow-x-auto overflow-y-hidden border-t border-white/10 bg-black/40 animate-fade-in"
+      className="relative shrink-0 overflow-x-auto overflow-y-hidden border-t border-ink/10 bg-ink/5 animate-fade-in"
       style={{ height: STRIP + 24 }}
       onScroll={measure}
       // A plain wheel (vertical) scrolls the strip sideways.
@@ -382,14 +382,14 @@ function Strip({ items, index, onPick }: { items: Item[]; index: number; onPick:
               key={`${it.id}:${i}`}
               onClick={() => onPick(i)}
               title={it.name}
-              className={`absolute top-3 overflow-hidden rounded-md bg-white/5 transition-[opacity,transform] duration-150 ${
+              className={`absolute top-3 overflow-hidden rounded-md bg-ink/5 transition-[opacity,transform] duration-150 ${
                 current ? "ring-2 ring-accent" : "opacity-55 hover:opacity-100"
               }`}
               style={{ left: left(i), width: STRIP, height: STRIP }}
             >
               {isSystemId(it.id) ? (
                 // Installed fonts have no rendered sample: a few characters in the font.
-                <FontMark item={it} className="flex h-full w-full items-center justify-center text-2xl text-white/80" />
+                <FontMark item={it} className="flex h-full w-full items-center justify-center text-2xl text-ink/80" />
               ) : (
                 <img
                   src={convertFileSrc(it.thumbPath)}
