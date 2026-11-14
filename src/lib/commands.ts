@@ -40,7 +40,7 @@ import {
 import { api, isSystemId, type Item } from "./api";
 import { fontApi } from "../features/fonts/api";
 import { checkForUpdate, openReleaseNotes } from "./update";
-import { currentFolderId, shelfShown, useStore } from "../store";
+import { currentFolderId, filterRowShown, shelfShown, useStore } from "../store";
 import { rowIds } from "./grouping";
 import { useShortcutHelp } from "../components/ShortcutHelp";
 import { isMac } from "./shortcuts";
@@ -179,6 +179,15 @@ const ALL_COMMANDS: Command[] = [
     run: (s) => s.togglePanelTab("shelf"),
   },
   {
+    id: "view.filterRow",
+    // Open or close the row of conditions under the toolbar (docs/NAVIGATION.md「ツールバー」).
+    title: "絞り込みの行",
+    checked: (s) => filterRowShown(s),
+    // A smart folder shows it whatever the choice.
+    enabled: (s) => s.view.kind !== "smart" && !s.editingSmart,
+    run: (s) => s.toggleFilterRow(),
+  },
+  {
     id: "view.toc",
     title: "グループの目次",
     keys: ["Mod+Alt+J"],
@@ -220,8 +229,11 @@ const ALL_COMMANDS: Command[] = [
     id: "edit.filter",
     title: "絞り込みへ",
     keys: ["Mod+Shift+F"],
-    // The filter row is always there: the key takes the focus to its first condition.
-    run: () => document.querySelector<HTMLElement>("[data-filter-row] button:not(:disabled)")?.focus(),
+    // Opens the filter row when closed, then takes the focus to its first condition.
+    run: (s) => {
+      if (!filterRowShown(s)) s.toggleFilterRow();
+      requestAnimationFrame(() => document.querySelector<HTMLElement>("[data-filter-row] button:not(:disabled)")?.focus());
+    },
   },
   {
     id: "edit.undo",

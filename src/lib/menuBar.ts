@@ -21,8 +21,7 @@ import { api, type LibraryEntry } from "./api";
 import { command, isEnabled, labelOf, runCommand, type Command } from "./commands";
 import { warn } from "./log";
 import { comboText, isMac } from "./shortcuts";
-import { GROUPS, LAYOUTS } from "../components/ViewMenu";
-import { SORTS } from "../components/Toolbar";
+import { GROUPS, LAYOUTS, SORTS } from "../components/ViewMenu";
 import { LIBRARY_GROUPS, shownGroupBy, useStore } from "../store";
 
 type S = ReturnType<typeof useStore.getState>;
@@ -279,6 +278,7 @@ async function build(libraries: LibraryEntry[]): Promise<Menu> {
         { checked: (x) => x.desc, enabled: (x) => x.sort !== "manual" },
       ),
     ]),
+    cmd("view.filterRow"),
     cmd("view.toc"),
     cmd("view.subfolders"),
     sep(),

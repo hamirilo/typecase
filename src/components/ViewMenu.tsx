@@ -1,8 +1,10 @@
-// Toolbar controls for how the list looks, each on its own: the layout
-// (one click), grouping into sections (one click), and what to show per tile.
-import { ALargeSmall, Check, ChevronDown, Group, LayoutGrid, SlidersHorizontal } from "lucide-react";
+// How the list looks: one popover on the toolbar ("表示") with the layout,
+// the order, the grouping and what each grid tile shows. The sizes stay out on
+// the specimen text row (docs/NAVIGATION.md「ツールバー」).
+import { ALargeSmall, ArrowDownWideNarrow, ArrowUpNarrowWide, ChevronDown, LayoutGrid } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { GroupBy } from "../lib/grouping";
+import type { SortKey } from "../lib/api";
 import { LIBRARY_GROUPS, shownGroupBy, useStore, type Layout, type ShowInfo } from "../store";
 
 /** The groupings (the store's `GROUPS`), with their labels. */
@@ -25,6 +27,15 @@ export const LAYOUTS: { key: Layout; label: string; icon: React.ReactNode; hint:
     hint: "フォントを 1 行ずつ大きく並べ、同じ文字で見比べる",
   },
   { key: "grid", label: "グリッド", icon: <LayoutGrid size={15} />, hint: "同じ大きさの枠に並べる" },
+];
+
+/** Sort keys, in the order offered. */
+export const SORTS: { key: SortKey; label: string }[] = [
+  { key: "importedAt", label: "追加日" },
+  { key: "name", label: "名前" },
+  { key: "size", label: "ファイルサイズ" },
+  { key: "rating", label: "評価" },
+  { key: "manual", label: "手動（ドラッグで並べ替え）" },
 ];
 
 /** What a grid tile can show under it. */
@@ -85,137 +96,185 @@ export function Dropdown({
   );
 }
 
-const heading = "px-2 pt-1 pb-1 text-[11px] font-semibold text-dim";
+const heading = "px-2 pt-1.5 pb-1 text-[11px] font-semibold text-dim";
+const rule = "mx-1.5 my-1.5 border-t border-line";
 
-/** The layouts side by side ([見本｜グリッド]), one click to switch. */
-export function LayoutSwitch() {
-  const layout = useStore((s) => s.layout);
-  const setLayout = useStore((s) => s.setLayout);
+/** A row of the popover: its name on the left, the control on the right. */
+function Row({ label, title, children }: { label: string; title?: string; children: React.ReactNode }) {
   return (
-    <div className="flex h-7 shrink-0 items-stretch rounded-md track @max-5xl:hidden">
-      {LAYOUTS.map((l) => (
-        <button
-          key={l.key}
-          title={`${l.label}：${l.hint}`}
-          aria-label={l.label}
-          aria-pressed={layout === l.key}
-          onClick={() => setLayout(l.key)}
-          className={`flex w-7 items-center justify-center rounded ${
-            layout === l.key ? "thumb" : "text-fg/85 hover:bg-hover hover:text-fg"
-          }`}
+    <div className="flex items-center gap-3 px-2 py-1.5" title={title}>
+      <span className="w-16 shrink-0 whitespace-nowrap text-dim">{label}</span>
+      <div className="flex min-w-0 flex-1 justify-end">{children}</div>
+    </div>
+  );
+}
+
+/** Choices side by side, one picked (macOS segmented control). */
+function Segment<K extends string>({
+  label,
+  items,
+  value,
+  onPick,
+}: {
+  label: string;
+  items: { key: K; label: React.ReactNode; title: string; disabled?: boolean }[];
+  value: K | null;
+  onPick: (k: K) => void;
+}) {
+  return (
+    <div role="group" aria-label={label} className="flex h-7 w-full items-stretch rounded-md track">
+      {items.map((i) => {
+        const on = value === i.key && !i.disabled;
+        return (
+          <button
+            key={i.key}
+            disabled={i.disabled}
+            aria-pressed={on}
+            title={i.title}
+            onClick={() => onPick(i.key)}
+            className={`flex flex-1 items-center justify-center gap-1 rounded px-1.5 whitespace-nowrap disabled:off ${
+              on ? "thumb font-medium" : "text-fg/85 enabled:hover:bg-hover enabled:hover:text-fg"
+            }`}
+          >
+            {i.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** The order and its direction. The installed fonts have no rating (docs/SYSTEM_FONTS.md). */
+function SortControl() {
+  const sort = useStore((s) => s.sort);
+  const desc = useStore((s) => s.desc);
+  const setSort = useStore((s) => s.setSort);
+  const canManual = useStore((s) => s.view.kind === "folder");
+  const isSystem = useStore((s) => s.view.kind === "system");
+  const manual = sort === "manual";
+  const label = manual ? "手動" : (SORTS.find((s) => s.key === sort)?.label ?? "");
+  return (
+    <div className="flex h-7 w-full items-stretch gap-1">
+      {/* A native select over a label, so the arrow matches the rest. */}
+      <label className="relative flex min-w-0 flex-1 items-center gap-1.5 rounded-md border border-edge pr-1.5 pl-2.5 whitespace-nowrap focus-within:border-accent">
+        <span className="min-w-0 flex-1 truncate">{label}</span>
+        <ChevronDown size={14} className="shrink-0 text-dim" />
+        <select
+          aria-label="並び順"
+          value={sort}
+          onChange={(e) => setSort(e.target.value as SortKey, desc)}
+          className="absolute inset-0 cursor-default opacity-0"
         >
-          {l.icon}
-        </button>
-      ))}
+          {SORTS.map((s) => (
+            <option
+              key={s.key}
+              value={s.key}
+              disabled={(s.key === "manual" && !canManual) || (isSystem && s.key === "rating")}
+            >
+              {s.key === "manual" && !canManual
+                ? "手動（フォルダのみ）"
+                : isSystem && s.key === "rating"
+                  ? "評価（ライブラリのフォントのみ）"
+                  : s.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <button
+        title={manual ? "手動の並びは昇順のみ" : desc ? "降順（クリックで昇順）" : "昇順（クリックで降順）"}
+        aria-label={desc ? "降順" : "昇順"}
+        disabled={manual}
+        onClick={() => setSort(sort, !desc)}
+        className="flex w-8 shrink-0 items-center justify-center rounded-md border border-edge enabled:hover:bg-hover disabled:off"
+      >
+        {desc ? <ArrowDownWideNarrow size={15} /> : <ArrowUpNarrowWide size={15} />}
+      </button>
     </div>
   );
 }
 
 /**
- * Splitting the list into sections: every choice side by side,
- * one click each, so nothing on the row moves when it changes (docs/UI.md).
- * When the toolbar is narrow the same choices fold into a menu in its place.
+ * "表示": how the list looks, in one popover (docs/NAVIGATION.md「表示のポップオーバー」).
+ * It stays open while things are picked, so several can be changed in a row;
+ * a click elsewhere or Esc closes it. The rows are always the same (what
+ * can't be used is greyed out).
  */
-export function GroupMenu() {
-  const groupBy = useStore(shownGroupBy);
-  // The installed fonts have no rating, tags or folder (docs/SYSTEM_FONTS.md).
-  const system = useStore((s) => s.view.kind === "system");
-  const off = (g: GroupBy) => system && LIBRARY_GROUPS.includes(g);
-  const setGroupBy = useStore((s) => s.setGroupBy);
-  const groups = GROUPS;
-  const current = groups.find((g) => g.key === groupBy) ?? groups[0];
-  return (
-    <div className="flex h-7 shrink-0 items-center gap-1.5">
-      <span className="text-dim @max-2xl:hidden">グループ</span>
-      {/* Narrow: a native select over a label, like the sort order next to it. */}
-      <label
-        title={`グループ分け：${current.hint}`}
-        className="relative hidden h-full items-center gap-1.5 rounded-md pr-2 pl-2.5 whitespace-nowrap ghost focus-within:border-accent @max-2xl:flex"
-      >
-        <span className="text-dim @max-md:hidden">グループ</span>
-        <Group size={14} className="hidden text-dim @max-md:block" />
-        {current.label}
-        <ChevronDown size={14} className="text-dim" />
-        <select
-          aria-label="グループ分け"
-          value={groupBy}
-          onChange={(e) => setGroupBy(e.target.value as GroupBy)}
-          className="absolute inset-0 cursor-default opacity-0"
-        >
-          {groups.map((g) => (
-            <option key={g.key} value={g.key} disabled={off(g.key)}>
-              {g.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      <div role="group" aria-label="グループ分け" className="flex h-full items-stretch rounded-md track @max-2xl:hidden">
-        {groups.map((g) => {
-          const on = groupBy === g.key;
-          return (
-            <button
-              key={g.key}
-              disabled={off(g.key)}
-              aria-pressed={on}
-              title={
-                off(g.key)
-                  ? `${g.label}：この端末のフォントには使えません（ライブラリのフォントだけ）`
-                  : `${g.label}：${g.hint}`
-              }
-              onClick={() => setGroupBy(g.key)}
-              className={`rounded px-2 whitespace-nowrap disabled:off ${
-                on ? "thumb font-medium" : "text-fg/85 enabled:hover:bg-hover enabled:hover:text-fg"
-              }`}
-            >
-              {g.label}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-/** The layout and the information shown under each tile. The sizes are on the specimen text row. */
-export function DisplayMenu() {
-  const showInfo = useStore((s) => s.showInfo);
-  const setShowInfo = useStore((s) => s.setShowInfo);
+export function ViewPopover() {
   const layout = useStore((s) => s.layout);
   const setLayout = useStore((s) => s.setLayout);
+  const groupBy = useStore(shownGroupBy);
+  const setGroupBy = useStore((s) => s.setGroupBy);
+  // The installed fonts have no rating, tags or folder (docs/SYSTEM_FONTS.md).
+  const system = useStore((s) => s.view.kind === "system");
+  const showInfo = useStore((s) => s.showInfo);
+  const setShowInfo = useStore((s) => s.setShowInfo);
+  const current = LAYOUTS.find((l) => l.key === layout) ?? LAYOUTS[0];
   return (
-    <Dropdown title="表示（レイアウト・表示する情報）" width="w-64" button={<SlidersHorizontal size={15} />}>
-      <div className={heading}>レイアウト</div>
-      {LAYOUTS.map((l) => (
-        <button
-          key={l.key}
-          data-close
-          onClick={() => setLayout(l.key)}
-          className={`flex w-full items-center gap-2 rounded px-2 py-1.5 text-left hover:bg-ink/8 ${
-            layout === l.key ? "text-fg" : "text-dim"
-          }`}
-        >
-          <span className={`shrink-0 ${layout === l.key ? "text-accent" : ""}`}>{l.icon}</span>
-          <span className="flex min-w-0 flex-1 flex-col">
-            <span>{l.label}</span>
-            <span className="text-[11px] text-dim">{l.hint}</span>
-          </span>
-          {layout === l.key && <Check size={13} className="shrink-0 text-accent" />}
-        </button>
-      ))}
-      <div className="mx-1.5 my-1 border-t border-line" />
+    <Dropdown
+      title={`表示：${current.label}（レイアウト・並び順・グループ・表示する情報）`}
+      width="w-[26rem]"
+      button={
+        <>
+          {current.icon}
+          <span className="@max-[50rem]:hidden">表示</span>
+          <ChevronDown size={13} className="text-dim" />
+        </>
+      }
+    >
+      <Row label="レイアウト">
+        <Segment
+          label="レイアウト"
+          value={layout}
+          onPick={setLayout}
+          items={LAYOUTS.map((l) => ({
+            key: l.key,
+            label: (
+              <>
+                {l.icon}
+                {l.label}
+              </>
+            ),
+            title: `${l.label}：${l.hint}`,
+          }))}
+        />
+      </Row>
+      <Row label="並び順">
+        <SortControl />
+      </Row>
+      <Row label="グループ">
+        <Segment
+          label="グループ分け"
+          value={groupBy}
+          onPick={setGroupBy}
+          items={GROUPS.map((g) => {
+            const off = system && LIBRARY_GROUPS.includes(g.key);
+            return {
+              key: g.key,
+              label: g.label,
+              disabled: off,
+              title: off
+                ? `${g.label}：この端末のフォントには使えません（ライブラリのフォントだけ）`
+                : `${g.label}：${g.hint}`,
+            };
+          })}
+        />
+      </Row>
+      <div className={rule} />
       <div className={heading}>グリッドのタイルの下に表示</div>
-      {INFO.map((i) => (
-        <label key={i.key} className="flex cursor-default items-center gap-2 rounded px-2 py-1.5 hover:bg-ink/8">
-          <input
-            type="checkbox"
-            checked={showInfo[i.key]}
-            disabled={layout !== "grid"}
-            onChange={(e) => setShowInfo({ [i.key]: e.target.checked })}
-            className="accent-accent disabled:off"
-          />
-          {i.label}
-        </label>
-      ))}
+      <div className="grid grid-cols-3 px-1 pb-1" title={layout === "grid" ? undefined : "グリッドのレイアウトで使えます"}>
+        {INFO.map((i) => (
+          <label key={i.key} className="flex cursor-default items-center gap-2 rounded px-1 py-1.5 hover:bg-ink/8">
+            <input
+              type="checkbox"
+              checked={showInfo[i.key]}
+              disabled={layout !== "grid"}
+              onChange={(e) => setShowInfo({ [i.key]: e.target.checked })}
+              className="accent-accent disabled:off"
+            />
+            {i.label}
+          </label>
+        ))}
+      </div>
     </Dropdown>
   );
 }
