@@ -56,7 +56,7 @@ Rust のコマンドは `src/lib/api.ts`（フォントだけのものは `featu
 | アプリの土台（core） | `src/lib/*`, `src/store.ts`, `src/components/*` | ライブラリ・取り込み・フォルダ・タグ・スマートフォルダ・検索・一覧の骨組み（Grid / Sidebar / Toolbar / Inspector / Viewer）・設定・Updater |
 | | `src-tauri/src/{db,import,library,search,proxy,transfer,export,commands}.rs` | スキーマ・クエリ、取り込み、ライブラリの中のファイル、検索式、OS のプロキシ、ライブラリ間のコピー・移動、書き出し、共通コマンド |
 | フォント | `src/features/fonts/` | この端末のフォントの一覧・絞り込み・件数・シェルフへの差し込み・ライブラリとの照合（`system.ts`）、詳細パネル（`SystemFontPanel.tsx`）、照合の印（`FontLink.tsx`）、フォント専用コマンドのラッパ（`api.ts`）、フォントの読み込み（`loader.ts`）、見本の行とグリッドのタイル（`FontRows.tsx`）、ビューア（`FontView.tsx`）、詳細パネルの行（`FontDetails.tsx`）、絞り込みの行の言語・書体・太さ・特徴（`FontFilters.tsx`）、見本の文字の行と大きさ（`SpecimenControls.tsx`）、見本のパターン（`patterns.ts`）、比較ビュー（`CompareView.tsx`）、シェルフの行（`ShelfChip.tsx`）、ウェイト名（`weights.ts`） |
-| | `src-tauri/src/fonts/` | パース・分類・見本の描画（`mod.rs`）、フォント専用コマンド（`commands.rs`）、この端末のフォントの読み込みとキャッシュ（`system.rs`） |
+| | `src-tauri/src/fonts/` | パース・分類・見本の描画（`mod.rs`）、フォント専用コマンド（`commands.rs`）、読んで展開したフォントファイルのキャッシュ（`cache.rs`。同じフォントを続けて問い合わせるコマンドが 1 回の読み込みを使い回す）、この端末のフォントの読み込みとキャッシュ（`system.rs`） |
 
 依存の向きは **features → core** のみ。core がフォントの知識を持つのは、DB に入っている語彙（`FONT_SCRIPTS` /
 `FONT_CATEGORIES` のラベル、`Item` のフォント列、`Filter.fontScripts` など）までにとどめ、振る舞いは features に置く。

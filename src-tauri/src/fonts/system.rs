@@ -232,13 +232,13 @@ pub fn find(id: &str) -> Result<SystemFont, String> {
         .ok_or_else(|| "このフォントは見つかりません（この端末から削除された可能性があります）".into())
 }
 
-/// The font file of an installed font, unpacked like a library font's.
-pub fn sfnt(id: &str) -> Result<Vec<u8>, String> {
+/// The font file of an installed font and its type (read through `fonts::cache` like a library font's).
+pub fn file(id: &str) -> Result<(PathBuf, String), String> {
     let font = find(id)?;
     if stat(&font.path).is_none() {
         return Err("このフォントは読めません（この端末から削除された可能性があります）".into());
     }
-    to_sfnt(&std::fs::read(&font.path).map_err(|e| e.to_string())?, &font.ext)
+    Ok((font.path, font.ext))
 }
 
 #[cfg(test)]
@@ -322,7 +322,7 @@ mod tests {
 
     #[test]
     fn only_listed_fonts_are_read() {
-        assert!(sfnt("sys:not-listed").is_err());
+        assert!(file("sys:not-listed").is_err());
         assert!(!is_system_id("0b5c…"));
     }
 }
