@@ -2,6 +2,7 @@
 //! OpenType data, names and character lists, and a rendered sample used as
 //! the thumbnail. The original file is stored as is.
 
+pub mod cache;
 pub mod commands;
 pub mod system;
 

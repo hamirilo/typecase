@@ -48,7 +48,7 @@
     そこでも見つけられる。同じ名前のファイルが 2 つあれば（手で入れた別の版など）パスの順で 2 つ目以降を分け、名前の無いものはパスで作る
   - **フロントエンドからはパスを受け取らない**。ID は直前に読んだ一覧から引き、そこにあるファイルだけを読む
   - フォントの中身は、ライブラリのフォントと同じコマンド（`font_data` / `font_info` / `font_faces` / `font_list_preview`）で返す。
-    `fonts/commands.rs` の `font_sfnt` が `sys:` の ID を `system::sfnt` へ振り分ける
+    `fonts/commands.rs` の `font_sfnt` が `sys:` の ID を `system::file` でファイルに引き、ライブラリのフォントと同じ `fonts::cache` で読む
   - 足したコマンドは `system_fonts(reload)`（一覧）と `reveal_system_font(id)`（Finder / エクスプローラで表示）だけ。
     アプリのコマンドなので capabilities と CSP は変えていない
 - フロントエンド：`src/features/fonts/system.ts`

@@ -5,7 +5,6 @@ use crate::commands::{err, item_paths, with_lib, AppState, CmdResult};
 use crate::db;
 use crate::import;
 use serde::Serialize;
-use std::fs;
 use tauri::{AppHandle, Manager, State};
 
 /// The fonts installed on this computer (fonts/system.rs); `reload` reads the
@@ -63,13 +62,15 @@ pub fn library_font_ps_names(state: State<AppState>) -> CmdResult<Vec<String>> {
 }
 
 /// The font file of a font item, or of a font installed on this computer
-/// (`system`), unpacked (WOFF / WOFF2) and, for a collection, cut down to one font.
-fn font_sfnt(state: &AppState, id: &str) -> CmdResult<Vec<u8>> {
+/// (`system`), unpacked (WOFF / WOFF2). Read through `cache`: a grid tile asks
+/// for its sample line and its font together, and they share one read.
+fn font_sfnt(state: &AppState, id: &str) -> CmdResult<super::cache::Sfnt> {
     if super::system::is_system_id(id) {
-        return super::system::sfnt(id);
+        let (path, ext) = super::system::file(id)?;
+        return super::cache::load(&path, &ext);
     }
     let (item, path) = item_paths(state, &[id.to_string()])?.pop().ok_or("フォントが見つかりません")?;
-    super::to_sfnt(&fs::read(path).map_err(err)?, &item.ext)
+    super::cache::load(&path, &item.ext)
 }
 
 /// Names of every font in the file and the characters of font `face`.
