@@ -519,7 +519,7 @@ export async function removeFromShelf(ids: string[]) {
   if (!ids.length) return;
   if (!(await st().run(() => api.removeFromTray(ids)))) return;
   // No toast: on the shelf (or compared from it) the chip goes away in sight;
-  // elsewhere (B, the details panel's button) the HUD says so. ⌘Z puts them back.
+  // elsewhere (B, the selection bar) the HUD says so. ⌘Z puts them back.
   undoable("シェルフから外す", () => trayAdd(ids));
   const s = st();
   if (!shelfShown(s) && !s.comparing) showHud({ kind: "shelfOff" }, ids);
