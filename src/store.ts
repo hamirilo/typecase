@@ -232,6 +232,11 @@ interface State {
   shelf: Item[];
   /** What the details panel on the right shows: the selection's information or the shelf; changed only by the user. */
   panelTab: PanelTab;
+  /** シェルフの置き方：情報とタブで切り替えるか、情報の下に並べるか（docs/FONT_UI.md「シェルフ」）。 */
+  shelfLayout: "tab" | "split";
+  /** 情報の下に並べるとき、シェルフの高さ（px）と、見出しだけに畳んでいるか。 */
+  shelfHeight: number;
+  shelfFolded: boolean;
   /** The comparison of the shelf is shown in place of the list. */
   comparing: boolean;
   /** Bands of `items`: the `groupBy` sections. */
@@ -300,6 +305,9 @@ interface State {
    */
   togglePanelTab: (tab: PanelTab) => void;
   setComparing: (on: boolean) => void;
+  setShelfLayout: (v: "tab" | "split") => void;
+  setShelfHeight: (px: number) => void;
+  setShelfFolded: (folded: boolean) => void;
   toggleSidebar: () => void;
   setTocOpen: (open: boolean) => void;
   /** Sets a panel's width (kept within its limits, see PANEL_WIDTH). */
@@ -404,7 +412,8 @@ export type PanelTab = "info" | "shelf";
 export const filterRowShown = (s: Pick<State, "filterRowOpen" | "view" | "editingSmart">) =>
   s.filterRowOpen || s.view.kind === "smart" || s.editingSmart !== null;
 
-export const shelfShown = (s: { inspectorOpen: boolean; panelTab: PanelTab }) => s.inspectorOpen && s.panelTab === "shelf";
+export const shelfShown = (s: Pick<State, "inspectorOpen" | "panelTab" | "shelfLayout" | "shelfFolded">) =>
+  s.inspectorOpen && (s.shelfLayout === "split" ? !s.shelfFolded : s.panelTab === "shelf");
 
 const loadJson = (key: string): object => {
   try {
@@ -721,6 +730,9 @@ export const useStore = create<State>((set, get) => ({
   rawItems: [],
   shelf: [],
   panelTab: load("panelTab") === "shelf" ? "shelf" : "info",
+  shelfLayout: load("shelfLayout") === "split" ? "split" : "tab",
+  shelfHeight: loadNumber("shelfHeight", 320),
+  shelfFolded: load("shelfFolded") === "1",
   comparing: false,
   sections: [],
   folders: [],
@@ -934,16 +946,43 @@ export const useStore = create<State>((set, get) => ({
     persist("filterRowOpen", String(filterRowOpen));
   },
   setPanelTab: (panelTab) => {
+    // 情報の下に並べているときは、シェルフを出す＝畳んでいたら開く（タブは無い）。
+    if (get().shelfLayout === "split" && panelTab === "shelf") get().setShelfFolded(false);
     set({ panelTab, inspectorOpen: true });
     persist("panelTab", panelTab);
     persist("inspectorOpen", "true");
   },
   togglePanelTab: (tab) => {
     const s = get();
-    if (s.inspectorOpen && s.panelTab === tab) s.toggleInspector();
+    if (s.shelfLayout === "split") {
+      // 情報はいつも出ている。シェルフは畳む・開く。
+      if (tab === "shelf") {
+        if (s.inspectorOpen && !s.shelfFolded) s.setShelfFolded(true);
+        else s.setPanelTab("shelf");
+      } else if (s.inspectorOpen) s.toggleInspector();
+      else s.setPanelTab("info");
+    } else if (s.inspectorOpen && s.panelTab === tab) s.toggleInspector();
     else s.setPanelTab(tab);
   },
   setComparing: (comparing) => set({ comparing }),
+  setShelfLayout: (shelfLayout) => {
+    set({
+      shelfLayout,
+      inspectorOpen: true,
+      ...(shelfLayout === "split" ? { shelfFolded: false } : { panelTab: "shelf" as PanelTab }),
+    });
+    persist("shelfLayout", shelfLayout);
+    persist("shelfFolded", "0");
+  },
+  setShelfHeight: (px) => {
+    const shelfHeight = Math.round(Math.max(120, Math.min(900, px)));
+    set({ shelfHeight });
+    persist("shelfHeight", String(shelfHeight));
+  },
+  setShelfFolded: (shelfFolded) => {
+    set({ shelfFolded });
+    persist("shelfFolded", shelfFolded ? "1" : "0");
+  },
   toggleSidebar: () => {
     const sidebarOpen = !get().sidebarOpen;
     set({ sidebarOpen });

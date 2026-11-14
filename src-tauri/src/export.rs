@@ -18,13 +18,15 @@ static CANCEL: AtomicBool = AtomicBool::new(false);
 
 /// Copies the original files into `dest`, never overwriting existing files.
 /// Off the main thread (gigabytes may be copied), holding the library only
-/// to look the items up.
+/// to look the items up. `prefixes[i]`：`ids[i]` のファイル名の先頭に付ける文字
+/// （シェルフの順の連番「001_」など。docs/FONT_UI.md「シェルフ」）。
 #[tauri::command]
 pub async fn export_items(
     app: AppHandle,
     ids: Vec<String>,
     dest: PathBuf,
     subdirs: Option<Vec<String>>,
+    prefixes: Option<Vec<String>>,
 ) -> CmdResult<usize> {
     tauri::async_runtime::spawn_blocking(move || {
         let items = item_paths(&app.state::<AppState>(), &ids)?;
@@ -36,7 +38,11 @@ pub async fn export_items(
                 .map_or("", String::as_str);
             let dir = export_dir(&dest, sub);
             fs::create_dir_all(&dir).map_err(err)?;
-            fs::copy(src, export_target(&dir, &item.name, &item.ext)).map_err(err)?;
+            let prefix = prefixes
+                .as_ref()
+                .and_then(|p| p.get(ids.iter().position(|x| *x == item.id)?))
+                .map_or("", String::as_str);
+            fs::copy(src, export_target(&dir, &prefixed(prefix, &item.name), &item.ext)).map_err(err)?;
         }
         Ok(items.len())
     })
@@ -198,6 +204,11 @@ fn safe_name(name: &str) -> String {
         .collect()
 }
 
+/// 書き出すときの名前：`prefix` を名前の先頭に付ける（拡張子の扱いは `export_target`）。
+fn prefixed(prefix: &str, name: &str) -> String {
+    format!("{prefix}{name}")
+}
+
 /// `dest/name.ext`, or `name (2).ext`… when taken. Keeps a renamed item's
 /// display name but makes sure the extension is there.
 fn export_target(dest: &Path, name: &str, ext: &str) -> PathBuf {
@@ -228,6 +239,15 @@ mod tests {
         fs::write(d.join("Sans.otf"), "x").unwrap();
         fs::write(d.join("Sans (2).otf"), "x").unwrap();
         assert_eq!(export_target(d, "Sans.otf", "otf"), d.join("Sans (3).otf"));
+    }
+
+    #[test]
+    fn numbered_export_names() {
+        let tmp = tempfile::tempdir().unwrap();
+        let d = tmp.path();
+        assert_eq!(export_target(d, &prefixed("001_", "Sans.OTF"), "otf"), d.join("001_Sans.otf"));
+        assert_eq!(export_target(d, &prefixed("012_", "renamed"), "ttf"), d.join("012_renamed.ttf"));
+        assert_eq!(export_target(d, &prefixed("", "Sans.otf"), "otf"), d.join("Sans.otf"));
     }
 
     #[test]
