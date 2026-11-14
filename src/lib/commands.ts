@@ -7,7 +7,7 @@
  * Keys are written like "Mod+Shift+R": Mod is ⌘ on macOS and Ctrl elsewhere.
  * The first key is the one menus show.
  */
-import { Copy, FolderInput, Heart, Layers, Pin, Plus, Trash2, type LucideIcon } from "lucide-react";
+import { Copy, FolderInput, Heart, Layers, Pin, Plus, Trash2, Undo2, type LucideIcon } from "lucide-react";
 import { appearanceLabel, nextAppearance, parseAppearance } from "./appearance";
 import {
   copySelection,
@@ -35,6 +35,7 @@ import {
   transferAll,
   transferList,
   trayList,
+  undoLast,
 } from "./actions";
 import { api, isSystemId, type Item } from "./api";
 import { fontApi } from "../features/fonts/api";
@@ -42,6 +43,7 @@ import { checkForUpdate, openReleaseNotes } from "./update";
 import { currentFolderId, shelfShown, useStore } from "../store";
 import { rowIds } from "./grouping";
 import { useShortcutHelp } from "../components/ShortcutHelp";
+import { isMac } from "./shortcuts";
 
 type S = ReturnType<typeof useStore.getState>;
 
@@ -220,6 +222,20 @@ const ALL_COMMANDS: Command[] = [
     keys: ["Mod+Shift+F"],
     // The filter row is always there: the key takes the focus to its first condition.
     run: () => document.querySelector<HTMLElement>("[data-filter-row] button:not(:disabled)")?.focus(),
+  },
+  {
+    id: "edit.undo",
+    title: "取り消す",
+    label: (s) => {
+      const last = s.undoStack.at(-1);
+      return last ? `取り消す：${last.label}` : "取り消す";
+    },
+    icon: Undo2,
+    keys: ["Mod+Z"],
+    // On macOS the menu bar's item takes ⌘Z in text fields too (it stands in
+    // for the system's Undo), so it is never greyed out there.
+    enabled: (s) => isMac || s.undoStack.length > 0,
+    run: () => (typing() ? void document.execCommand("undo") : undoLast()),
   },
   {
     id: "edit.selectAll",
