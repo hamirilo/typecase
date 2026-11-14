@@ -2,7 +2,7 @@
 // the order, the grouping and what each grid tile shows. The sizes stay out on
 // the specimen text row (docs/NAVIGATION.md「ツールバー」).
 import { ALargeSmall, ArrowDownWideNarrow, ArrowUpNarrowWide, ChevronDown, LayoutGrid } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { GroupBy } from "../lib/grouping";
 import type { SortKey } from "../lib/api";
 import { LIBRARY_GROUPS, shownGroupBy, useStore, type Layout, type ShowInfo } from "../store";
@@ -61,7 +61,17 @@ export function Dropdown({
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const [shift, setShift] = useState(0);
   const ref = useRef<HTMLDivElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  // Hangs from the button's right edge; when the toolbar is narrow (stacked)
+  // that would run under the sidebar, so it moves right to stay inside the toolbar.
+  useLayoutEffect(() => {
+    if (!open || !panel.current) return setShift(0);
+    const bar = ref.current?.closest("header")?.getBoundingClientRect();
+    const box = panel.current.getBoundingClientRect();
+    setShift(bar ? Math.max(0, bar.left + 8 - (box.left - shift)) : 0);
+  }, [open]);
   useEffect(() => {
     if (!open) return;
     const away = (e: PointerEvent) => !ref.current?.contains(e.target as Node) && setOpen(false);
@@ -86,6 +96,8 @@ export function Dropdown({
       </button>
       {open && (
         <div
+          ref={panel}
+          style={shift ? { translate: `${shift}px 0` } : undefined}
           className={`absolute top-full right-0 z-40 mt-1 ${width} animate-slide-down rounded-lg border border-line bg-raised p-1 text-xs shadow-xl`}
           onClick={(e) => (e.target as HTMLElement).closest("[data-close]") && setOpen(false)}
         >
