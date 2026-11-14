@@ -21,8 +21,7 @@ import { api, type LibraryEntry } from "./api";
 import { command, isEnabled, labelOf, runCommand, type Command } from "./commands";
 import { warn } from "./log";
 import { comboText, isMac } from "./shortcuts";
-import { GROUPS, LAYOUTS } from "../components/ViewMenu";
-import { SORTS } from "../components/Toolbar";
+import { GROUPS, LAYOUTS, SORTS } from "../components/ViewMenu";
 import { LIBRARY_GROUPS, shownGroupBy, useStore } from "../store";
 
 type S = ReturnType<typeof useStore.getState>;
@@ -41,8 +40,11 @@ interface Entry {
 
 const st = () => useStore.getState();
 
-/** Keys that stay with the page (typing, the list's own handling). */
-const pageOnly = (key: string) => !key.includes("Mod+") || key === "Mod+C";
+/**
+ * Keys that stay with the page (typing, the list's own handling). Windows:
+ * Ctrl+Z too, so text fields keep their own undo (the list takes it otherwise).
+ */
+const pageOnly = (key: string) => !key.includes("Mod+") || key === "Mod+C" || (!isMac && key === "Mod+Z");
 
 /** "Mod+Shift+[" → "CmdOrCtrl+Shift+BracketLeft". */
 function accelerator(key: string): string {
@@ -77,6 +79,8 @@ const APP_WIDE = new Set([
   "library.recent",
   "app.settings",
   "app.checkUpdate",
+  // Undo in text fields (settings) on macOS.
+  "edit.undo",
   "help.shortcuts",
   "help.log",
   "help.about",
@@ -190,14 +194,16 @@ async function build(libraries: LibraryEntry[]): Promise<Menu> {
   const edit = submenu("編集", [
     ...(isMac
       ? [
-          PredefinedMenuItem.new({ item: "Undo", text: "取り消す" }),
+          // Ours, not the system's Undo: ⌘Z takes back operations, and in a
+          // text field the field's typing (edit.undo, docs/NOTIFICATIONS.md).
+          cmd("edit.undo"),
           PredefinedMenuItem.new({ item: "Redo", text: "やり直す" }),
           sep(),
           PredefinedMenuItem.new({ item: "Cut", text: "カット" }),
           PredefinedMenuItem.new({ item: "Copy", text: "コピー" }),
           PredefinedMenuItem.new({ item: "Paste", text: "ペースト" }),
         ]
-      : [cmd("item.copy")]),
+      : [cmd("edit.undo"), sep(), cmd("item.copy")]),
     cmd("item.copyTags"),
     cmd("item.pasteTags"),
     sep(),
@@ -272,6 +278,7 @@ async function build(libraries: LibraryEntry[]): Promise<Menu> {
         { checked: (x) => x.desc, enabled: (x) => x.sort !== "manual" },
       ),
     ]),
+    cmd("view.filterRow"),
     cmd("view.toc"),
     cmd("view.subfolders"),
     sep(),

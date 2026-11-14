@@ -74,3 +74,48 @@ export function FontTitle({ item }: { item: Item }) {
     </div>
   );
 }
+
+/**
+ * 複数選択のプレビュー：1 件のときと同じ大きさの枠に、最初の 4 件の「Aa」をそれぞれの
+ * フォントで並べる（5 件目からは「+N」）。読めないあいだはサムネイル。
+ */
+export function FontSpecimenGrid({ items, count }: { items: Item[]; count: number }) {
+  return (
+    <div className="relative grid aspect-[4/3] grid-cols-2 grid-rows-2 gap-0.5 overflow-hidden rounded-lg bg-line">
+      {items.slice(0, 4).map((i) => (
+        <MiniCell key={i.id} item={i} />
+      ))}
+      {count > 4 && (
+        <span className="absolute right-1.5 bottom-1.5 rounded-full bg-black/60 px-2 text-[11px] font-bold text-white tabular-nums">
+          +{count - 4}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function MiniCell({ item }: { item: Item }) {
+  const id = item.id;
+  const [family, setFamily] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    setFamily(null);
+    const release = holdFont(id);
+    loadFont(id)
+      .then((f) => live && setFamily(f))
+      .catch(() => {});
+    return () => {
+      live = false;
+      release();
+    };
+  }, [id]);
+  return (
+    <div className="flex min-h-0 items-center justify-center overflow-hidden bg-white text-black" title={item.fontFamily ?? item.name}>
+      {family ? (
+        <span style={{ fontFamily: `"${family}"`, fontSize: 36, lineHeight: 1 }}>Aa</span>
+      ) : (
+        <img src={convertFileSrc(item.thumbPath)} className="max-h-full max-w-full object-contain" draggable={false} alt="" />
+      )}
+    </div>
+  );
+}

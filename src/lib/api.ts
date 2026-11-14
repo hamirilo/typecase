@@ -372,8 +372,9 @@ export const api = {
   setPinned: (ids: string[], on: boolean) => invoke<void>("set_pinned", { ids, on }),
   copyItems: (ids: string[]) => invoke<number>("copy_items", { ids }),
   /** `subdirs[i]`: folder under `dest` for `ids[i]` ("和文/ゴシック", "" = `dest` itself). */
-  exportItems: (ids: string[], dest: string, subdirs?: string[]) =>
-    invoke<number>("export_items", { ids, dest, subdirs: subdirs ?? null }),
+  /** `prefixes[i]`: `ids[i]` のファイル名の先頭に付ける文字（シェルフの順の連番「001_」）。 */
+  exportItems: (ids: string[], dest: string, subdirs?: string[], prefixes?: string[]) =>
+    invoke<number>("export_items", { ids, dest, subdirs: subdirs ?? null, prefixes: prefixes ?? null }),
   /**
    * Every item not in the trash into a new "<library name>" folder in `dest`,
    * in "<folders>/…". Reports "export-progress".

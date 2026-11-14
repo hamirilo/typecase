@@ -1,8 +1,8 @@
-// The shelf: a tab of the details panel on the right (DetailsPanel.tsx)
-// where fonts are gathered to be compared (the `tray` table), at most
-// FONT_SHELF_MAX. It is shown when the user picks its tab, and for the length
-// of a drag from the list (docs/UI.md).
-import { ArrowRight, Ban, ListX, Plus, X } from "lucide-react";
+// The shelf: where fonts are gathered to be compared (the `tray` table), at
+// most FONT_SHELF_MAX. A tab of the details panel on the right, or under the
+// information (DetailsPanel.tsx; the user picks which). It is shown when the
+// user picks it, and for the length of a drag from the list (docs/UI.md).
+import { ArrowRight, Ban, ListX, MoreHorizontal, Plus, X } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { clearTray, exportTray, removeFromShelf, shelfAdding, transferList } from "../lib/actions";
 import type { Item } from "../lib/api";
@@ -15,6 +15,7 @@ export function Shelf() {
   const shelf = useStore((s) => s.shelf);
   const comparing = useStore((s) => s.comparing);
   const setComparing = useStore((s) => s.setComparing);
+  const shelfLayout = useStore((s) => s.shelfLayout);
   // Items dragged from the list: the whole shelf takes them.
   const adding = useStore((s) => (s.drag?.kind === "items" && s.drag.from !== "shelf" ? s.drag.ids : null));
   const over = useStore((s) => s.drag?.kind === "items" && s.drag.from !== "shelf" && s.dropTarget === "tray");
@@ -28,6 +29,18 @@ export function Shelf() {
     if (flash !== null && el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [flash]);
 
+  const st = useStore.getState;
+  const moreMenu = (e: React.MouseEvent) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    useMenu.getState().show({ clientX: r.left, clientY: r.bottom + 4 }, [
+      { header: "置き方" },
+      { label: "情報とタブで切り替える", checked: shelfLayout === "tab", onClick: () => st().setShelfLayout("tab") },
+      { label: "情報の下に並べる", checked: shelfLayout === "split", onClick: () => st().setShelfLayout("split") },
+      { separator: true },
+      { label: "書き出し…", disabled: empty, onClick: exportTray },
+      { label: "別のライブラリへ…", disabled: empty, onClick: () => transferList({ kind: "tray" }) },
+    ]);
+  };
   const menu = (e: React.MouseEvent) =>
     useMenu.getState().show(e, [
       { label: "書き出し…", disabled: empty, onClick: exportTray },
@@ -49,19 +62,28 @@ export function Shelf() {
       )}
       {adding && <DropHint ids={adding} over={over} />}
       <div className="flex shrink-0 flex-col gap-2 border-b border-line p-3">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
+          {/* 情報の下に並べるときは、件数は境目の帯に出ている。 */}
           <span className="flex-1 text-dim tabular-nums">
-            {`${shelf.length} / ${FONT_SHELF_MAX} 件`}
+            {shelfLayout === "split" ? "" : `${shelf.length} / ${FONT_SHELF_MAX} 件`}
           </span>
-          {/* Not a trash can: it only takes things off the shelf. */}
+          {/* ごみ箱ではない：シェルフから外すだけ。名前を出す（「…」の中に隠さない）。 */}
           <button
             disabled={empty}
             onClick={clearTray}
-            title="シェルフを空にする（中身はそのまま残ります）"
-            aria-label="シェルフを空にする"
-            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-dim enabled:hover:bg-ink/10 enabled:hover:text-fg disabled:off"
+            title="シェルフから全部外す（中身はライブラリに残ります。⌘Z で戻せます）"
+            className="flex h-6 shrink-0 items-center justify-center gap-1 rounded-md px-2 whitespace-nowrap ghost disabled:off"
           >
-            <ListX size={15} />
+            <ListX size={14} />
+            空にする
+          </button>
+          <button
+            onClick={moreMenu}
+            title="置き方・書き出し・別のライブラリへ"
+            aria-label="シェルフのそのほかの操作"
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-dim hover:bg-ink/10 hover:text-fg"
+          >
+            <MoreHorizontal size={15} />
           </button>
         </div>
         <button

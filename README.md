@@ -56,7 +56,7 @@ bun run test           # Rust のユニットテスト + 型チェック
 | [NOTIFICATIONS.md](docs/NOTIFICATIONS.md) | 知らせ方（その場・HUD・トースト・OS の通知・ダイアログの使い分け、トーストの秒数） |
 | [NAVIGATION.md](docs/NAVIGATION.md) | サイドバーとツールバーの役割（場所・絞り込み・表示） |
 | [FONT_UI.md](docs/FONT_UI.md) | フォントの画面（見本・グループ分け・シェルフ・比較） |
-| [GROUP_TOC.md](docs/GROUP_TOC.md) | グループ分けの目次（いま見ている区切りの表示と、区切りへのジャンプ） |
+| [GROUP_TOC.md](docs/GROUP_TOC.md) | グループ分けの見出しと移動（一覧の上端に貼り付く見出しと、ほかの区切りへの移動） |
 | [SYSTEM_FONTS.md](docs/SYSTEM_FONTS.md) | この端末のフォント（ライブラリに取り込まない読み取り専用の一覧） |
 | [EXPORT.md](docs/EXPORT.md) | ライブラリ全体の書き出し（すべてのファイルをフォルダ構成どおりに） |
 | [ROADMAP.md](docs/ROADMAP.md) | 今後の予定 |

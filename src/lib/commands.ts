@@ -7,7 +7,7 @@
  * Keys are written like "Mod+Shift+R": Mod is ⌘ on macOS and Ctrl elsewhere.
  * The first key is the one menus show.
  */
-import { Copy, FolderInput, Heart, Layers, Pin, Plus, Trash2, type LucideIcon } from "lucide-react";
+import { Copy, FolderInput, Heart, Layers, Pin, Plus, Trash2, Undo2, type LucideIcon } from "lucide-react";
 import { appearanceLabel, nextAppearance, parseAppearance } from "./appearance";
 import {
   copySelection,
@@ -35,13 +35,15 @@ import {
   transferAll,
   transferList,
   trayList,
+  undoLast,
 } from "./actions";
 import { api, isSystemId, type Item } from "./api";
 import { fontApi } from "../features/fonts/api";
 import { checkForUpdate, openReleaseNotes } from "./update";
-import { currentFolderId, shelfShown, useStore } from "../store";
+import { currentFolderId, filterRowShown, shelfShown, useStore } from "../store";
 import { rowIds } from "./grouping";
 import { useShortcutHelp } from "../components/ShortcutHelp";
+import { isMac } from "./shortcuts";
 
 type S = ReturnType<typeof useStore.getState>;
 
@@ -147,7 +149,7 @@ const ALL_COMMANDS: Command[] = [
   // --------------------------------------------------------------- view
   {
     id: "view.appearance",
-    // Quick switch (the toolbar button too): システム → ライト → ダーク → システム.
+    // 次へ切り替える：システム → ライト → ダーク → システム（サイドバーの下端の行では直接選ぶ）。
     title: "外観を切り替え",
     label: (s) => `外観を${appearanceLabel(nextAppearance(parseAppearance(s.appSettings?.appearance)))}にする`,
     keys: ["Mod+Shift+D"],
@@ -177,8 +179,17 @@ const ALL_COMMANDS: Command[] = [
     run: (s) => s.togglePanelTab("shelf"),
   },
   {
+    id: "view.filterRow",
+    // Open or close the row of conditions under the toolbar (docs/NAVIGATION.md「ツールバー」).
+    title: "絞り込みの行",
+    checked: (s) => filterRowShown(s),
+    // A smart folder shows it whatever the choice.
+    enabled: (s) => s.view.kind !== "smart" && !s.editingSmart,
+    run: (s) => s.toggleFilterRow(),
+  },
+  {
     id: "view.toc",
-    title: "グループの目次",
+    title: "ほかのグループへ移動",
     keys: ["Mod+Alt+J"],
     // Only where the list is in sections (docs/UI.md: greyed out, not removed).
     enabled: (s) => s.sections.length > 0,
@@ -218,8 +229,25 @@ const ALL_COMMANDS: Command[] = [
     id: "edit.filter",
     title: "絞り込みへ",
     keys: ["Mod+Shift+F"],
-    // The filter row is always there: the key takes the focus to its first condition.
-    run: () => document.querySelector<HTMLElement>("[data-filter-row] button:not(:disabled)")?.focus(),
+    // Opens the filter row when closed, then takes the focus to its first condition.
+    run: (s) => {
+      if (!filterRowShown(s)) s.toggleFilterRow();
+      requestAnimationFrame(() => document.querySelector<HTMLElement>("[data-filter-row] button:not(:disabled)")?.focus());
+    },
+  },
+  {
+    id: "edit.undo",
+    title: "取り消す",
+    label: (s) => {
+      const last = s.undoStack.at(-1);
+      return last ? `取り消す：${last.label}` : "取り消す";
+    },
+    icon: Undo2,
+    keys: ["Mod+Z"],
+    // On macOS the menu bar's item takes ⌘Z in text fields too (it stands in
+    // for the system's Undo), so it is never greyed out there.
+    enabled: (s) => isMac || s.undoStack.length > 0,
+    run: () => (typing() ? void document.execCommand("undo") : undoLast()),
   },
   {
     id: "edit.selectAll",

@@ -12,6 +12,8 @@ import {
   useStore,
   type ListSource,
   type ToastAction,
+  type ToastOptions,
+  type UndoEntry,
 } from "../store";
 import { rowIds } from "./grouping";
 import { openGuarded } from "./libraryLock";
@@ -27,6 +29,39 @@ const st = () => useStore.getState();
  */
 function hiddenViewAction(entry: string, label: string, view: View): ToastAction | undefined {
   return isHidden(st(), entry) ? { label, onClick: () => st().setView(view) } : undefined;
+}
+
+// ------------------------------------------------------------ taking back (⌘Z)
+
+/**
+ * Records an operation that can be taken back with ⌘Z (docs/NOTIFICATIONS.md).
+ * `toast`, when given, tells of it; without a button of its own it gets
+ * 元に戻す, which takes it back just as ⌘Z does (once, whichever comes first).
+ */
+export function undoable(label: string, undo: () => Promise<unknown> | unknown, toast?: ToastOptions): UndoEntry {
+  const entry: UndoEntry = { label, undo: () => st().run(async () => void (await undo())) };
+  if (toast) {
+    const action = toast.action ?? { label: "元に戻す", onClick: () => void takeBack(entry, false) };
+    entry.toast = st().notify({ ...toast, action });
+    entry.button = !toast.action;
+  }
+  st().pushUndo(entry);
+  return entry;
+}
+
+/** Takes `entry` back once, and closes its toast. `hud`: say so (⌘Z; the toast's button is its own sign). */
+async function takeBack(entry: UndoEntry, hud: boolean) {
+  if (entry.done) return;
+  entry.done = true;
+  st().dropUndo(entry);
+  if (entry.toast !== undefined) st().dismissToast(entry.toast);
+  if ((await entry.undo()) && hud) showHud({ kind: "undo", label: entry.label }, []);
+}
+
+/** ⌘Z outside text fields: takes back the last operation, if any. */
+export function undoLast() {
+  const entry = st().undoStack.at(-1);
+  if (entry) void takeBack(entry, true);
 }
 
 export async function createLibraryDialog() {
@@ -211,10 +246,7 @@ export async function deleteSelection(ids: string[]) {
     await st().run(() => api.deleteItems(ids));
   } else {
     if (!(await st().run(() => api.trashItems(ids)))) return;
-    st().toast(`${ids.length} 件をゴミ箱へ移動しました`, false, {
-      label: "元に戻す",
-      onClick: () => st().run(() => api.restoreItems(ids)),
-    });
+    undoable("ゴミ箱へ移動", () => api.restoreItems(ids), { title: `${ids.length} 件をゴミ箱へ移動しました` });
   }
   selectSuccessor(before, ids);
 }
@@ -442,6 +474,8 @@ function trayAdd(ids: string[]): Promise<number> {
 export async function addToTray(ids: string[], { show = false } = {}) {
   if (!ids.length) return;
   const want = shelfIds(ids);
+  const there = new Set(st().shelf.map((i) => i.id));
+  const putOn = [...new Set(want.filter((id) => !there.has(id)))];
   const { fresh, full } = shelfAdding(ids);
   if (full) {
     st().notify({
@@ -460,9 +494,18 @@ export async function addToTray(ids: string[], { show = false } = {}) {
   st().flashTarget("tray");
   // The shelf in view shows it (the new chips, the count, the flash), so no
   // toast then; out of view, only the tab's count would change (docs/NOTIFICATIONS.md).
-  if (!added) st().toast("すでにシェルフにあります");
-  else if (!shelfShown(st())) st().toast(`${added} 件をシェルフに追加しました`, false, openShelfAction());
+  if (!added) {
+    st().toast("すでにシェルフにあります");
+    return;
+  }
+  const toast = shelfShown(st())
+    ? undefined
+    : { title: `${added} 件をシェルフに追加しました`, action: openShelfAction() };
+  shelfAdded = { ids: putOn, entry: undoable("シェルフに追加", () => api.removeFromTray(putOn), toast) };
 }
+
+/** The last adding to the shelf: taking those off again closes its toast. */
+let shelfAdded: { ids: string[]; entry: UndoEntry } | null = null;
 
 /** B: puts items on the shelf, or takes them off when all are already there. */
 export async function toggleTray(ids: string[]) {
@@ -475,10 +518,18 @@ export async function toggleTray(ids: string[]) {
 export async function removeFromShelf(ids: string[]) {
   if (!ids.length) return;
   if (!(await st().run(() => api.removeFromTray(ids)))) return;
-  st().toast(`${ids.length} 件をシェルフから外しました`, false, {
-    label: "元に戻す",
-    onClick: () => st().run(() => trayAdd(ids)),
-  });
+  // No toast: on the shelf (or compared from it) the chip goes away in sight;
+  // elsewhere (B, the selection bar) the HUD says so. ⌘Z puts them back.
+  undoable("シェルフから外す", () => trayAdd(ids));
+  const s = st();
+  if (!shelfShown(s) && !s.comparing) showHud({ kind: "shelfOff" }, ids);
+  // Put on and taken off again: the toast of the putting on says nothing now.
+  if (shelfAdded) {
+    const off = new Set(ids);
+    const { entry } = shelfAdded;
+    if (shelfAdded.ids.every((id) => off.has(id)) && entry.toast !== undefined) s.dismissToast(entry.toast);
+    shelfAdded = null;
+  }
 }
 
 /** Moves shelf items `ids` in front of `before` (null = to the end). */
@@ -491,10 +542,7 @@ export async function clearTray() {
   const ids = st().shelf.map((i) => i.id);
   if (!ids.length) return;
   if (!(await st().run(() => api.removeFromTray(ids)))) return;
-  st().toast(`シェルフを空にしました（${ids.length} 件）`, false, {
-    label: "元に戻す",
-    onClick: () => st().run(() => trayAdd(ids)),
-  });
+  undoable("シェルフを空にする", () => trayAdd(ids), { title: `シェルフを空にしました（${ids.length} 件）` });
 }
 
 /** Items of `view`, in the list's sort. */

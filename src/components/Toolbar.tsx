@@ -1,18 +1,12 @@
 import {
-  ArrowDownWideNarrow,
-  ArrowUpDown,
-  ArrowUpNarrowWide,
   ChevronDown,
   FolderSearch,
-  Monitor,
-  Moon,
-  PanelLeftClose,
+  ListFilter,
   PanelLeftOpen,
   PanelRightClose,
   PanelRightOpen,
   RefreshCw,
   Search,
-  Sun,
   Tag as TagIcon,
   Trash2,
   X,
@@ -22,27 +16,12 @@ import { dragRegion } from "../lib/titleBar";
 import { emptyTrash } from "../lib/actions";
 import { SpecimenControls } from "../features/fonts/SpecimenControls";
 import { reloadSystemFonts } from "../features/fonts/system";
-import { fontCategoryLabel, fontScriptLabel, type Folder, type SmartFolder, type SortKey, type Tag, type View } from "../lib/api";
+import { fontCategoryLabel, fontScriptLabel, type Folder, type SmartFolder, type Tag, type View } from "../lib/api";
 import { colorHex } from "../lib/colors";
-import { command } from "../lib/commands";
-import { appearanceLabel, nextAppearance, parseAppearance } from "../lib/appearance";
-import { activeConditions, placeTotal, useStore } from "../store";
+import { activeConditions, filterRowShown, placeTotal, useStore } from "../store";
 import { composing } from "../lib/ime";
 import { FilterRow } from "./FilterRow";
-import { DisplayMenu, GroupMenu, LayoutSwitch } from "./ViewMenu";
-
-/** Thin line between groups of controls. */
-const Divider = ({ className = "" }: { className?: string }) => (
-  <div className={`mx-0.5 h-5 w-px shrink-0 bg-line ${className}`} />
-);
-
-export const SORTS: { key: SortKey; label: string }[] = [
-  { key: "importedAt", label: "追加日" },
-  { key: "name", label: "名前" },
-  { key: "size", label: "ファイルサイズ" },
-  { key: "rating", label: "評価" },
-  { key: "manual", label: "手動（ドラッグで並べ替え）" },
-];
+import { ViewPopover } from "./ViewMenu";
 
 const SEARCH_HELP =
   [
@@ -90,8 +69,6 @@ export function Toolbar() {
   const tags = useStore((s) => s.tags);
   // Number of fonts (with tag grouping a font can be listed more than once).
   const count = useStore((s) => s.rawItems.length);
-  const selectedCount = useStore((s) => s.selected.size);
-  const setSelection = useStore((s) => s.setSelection);
   const view = useStore((s) => s.view);
   const folders = useStore((s) => s.folders);
   const sidebarOpen = useStore((s) => s.sidebarOpen);
@@ -102,6 +79,7 @@ export function Toolbar() {
   // "5 / 13 件" while narrowed: of the place's items without conditions.
   const total = useStore((s) => (activeConditions(s) > 0 ? placeTotal(s) : null));
   const smart = view.kind === "smart" ? smartFolders.find((f) => f.id === view.id) : undefined;
+  const rowShown = useStore(filterRowShown);
 
   // Debounce typing so each keystroke doesn't hit the DB.
   const [text, setText] = useState(search);
@@ -119,22 +97,26 @@ export function Toolbar() {
       // With the sidebar closed, the macOS window buttons are over this bar.
       style={sidebarOpen ? undefined : { paddingLeft: "max(1rem, var(--traffic-lights))" }}
     >
-      {/* Collapses progressively by toolbar width (container queries) so nothing
-          overflows into the inspector: label → slider → two rows. */}
+      {/* One row (docs/NAVIGATION.md「ツールバー」): the place and this view's own
+          controls on the left; the filter row's switch, "表示", the appearance,
+          the search box and the details panel on the right. It folds by toolbar
+          width (container queries, docs/UI.md「畳む順番」) and stacks into two only at @xl. */}
       <div className="flex items-center gap-x-3 gap-y-2 @max-xl:flex-col @max-xl:items-stretch">
-        {/* Sized to its content; the right side takes the rest, so short of room the
-            search box gives way first, then the title (never the count or the actions). */}
-        <div className="flex items-center gap-2">
-          <button
-            title={`サイドバーを${sidebarOpen ? "隠す" : "表示"}（Tab / ⌘⌥1）`}
-            onClick={toggleSidebar}
-            className={`-ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-md hover:bg-ink/5 ${
-              sidebarOpen ? "text-dim" : "text-accent"
-            }`}
-          >
-            {sidebarOpen ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
-          </button>
-          <h1 className="flex items-baseline gap-2 text-base font-semibold">
+        {/* Sized to its content; short of room this view's controls give way
+            first, then the title (never the count). */}
+        <div className="flex min-w-0 items-center gap-2">
+          {/* 隠すボタンはサイドバーの上端にある（Sidebar.tsx）。閉じているあいだだけ、開くボタンをここに出す。 */}
+          {!sidebarOpen && (
+            <button
+              title="サイドバーを表示（Tab / ⌘⌥1）"
+              aria-label="サイドバーを表示"
+              onClick={toggleSidebar}
+              className="-ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-accent hover:bg-ink/5"
+            >
+              <PanelLeftOpen size={16} />
+            </button>
+          )}
+          <h1 className="flex min-w-0 items-baseline gap-2 text-base font-semibold">
             {smart && <FolderSearch size={15} className="shrink-0 self-center text-accent" />}
             {view.kind === "tag" && (
               <TagIcon
@@ -143,38 +125,32 @@ export function Toolbar() {
                 style={{ color: colorHex(tags.find((t) => t.id === view.id)?.color) }}
               />
             )}
-            <span className="truncate">
+            <span className="min-w-0 max-w-[16rem] truncate">
               {editingSmart ? `「${editingSmart.name}」の条件` : viewTitle(view, folders, smartFolders, tags)}
             </span>
-            {selectedCount > 0 ? (
-              <span className="flex shrink-0 items-center gap-1 self-center rounded-full bg-accent/20 py-0.5 pr-0.5 pl-2.5 text-xs font-normal text-accent tabular-nums">
-                {selectedCount} 件を選択中
-                <span className="text-accent/60">/ {count}</span>
-                <button
-                  title="選択を解除（Esc）"
-                  onClick={() => setSelection([])}
-                  className="rounded-full p-0.5 hover:bg-accent/25"
-                >
-                  <X size={12} />
-                </button>
-              </span>
-            ) : (
-              <span
-                className={`shrink-0 text-xs font-normal tabular-nums ${total !== null ? "text-accent" : "text-dim"}`}
-                title={total !== null ? `絞り込み中（条件 ${conditions} 個）` : undefined}
-              >
-                {total !== null ? `${count} / ${total} 件` : `${count} 件`}
-              </span>
-            )}
+            {/* 選んでいる件数は選択バーに出す（docs/MENUS.md §7）。ここはいつも一覧の件数。 */}
+            <span
+              className={`shrink-0 text-xs font-normal tabular-nums ${total !== null ? "text-accent" : "text-dim"}`}
+              title={total !== null ? `絞り込み中（条件 ${conditions} 個）` : undefined}
+            >
+              {total !== null ? `${count} / ${total} 件` : `${count} 件`}
+            </span>
           </h1>
+          {/* This view's own controls, right of the title: what is right of
+              them stays put when the view changes (docs/UI.md). */}
+          <div className="flex min-w-0 items-center gap-3 text-xs">
+            <ViewControls />
+          </div>
           <div className="flex-1" />
-          <ThemeToggle className="hidden @max-xl:flex" />
           <InspectorToggle className="hidden @max-xl:flex" />
         </div>
-        <div className="flex flex-1 items-center justify-end gap-2">
+        {/* Never squeezed (they would run into the title): the title gives way instead. */}
+        <div className="flex flex-1 shrink-0 items-center justify-end gap-2">
+          <FilterToggle />
+          <ViewPopover />
           <label
             title={SEARCH_HELP}
-            className="flex h-8 min-w-28 shrink basis-60 items-center gap-2 rounded-md border border-transparent bg-ink/7 px-2 focus-within:border-accent @max-xl:min-w-0 @max-xl:flex-1"
+            className="flex h-8 min-w-40 shrink basis-60 @max-[50rem]:min-w-32 @max-[50rem]:basis-40 items-center gap-2 rounded-md border border-transparent bg-ink/7 px-2 focus-within:border-accent @max-xl:min-w-0 @max-xl:flex-1"
           >
             <Search size={14} className="shrink-0 text-dim" />
             <input
@@ -190,25 +166,23 @@ export function Toolbar() {
               <X size={14} />
             </button>
           </label>
-          <ThemeToggle className="flex @max-xl:hidden" />
           <InspectorToggle className="flex @max-xl:hidden" />
         </div>
       </div>
       {/* The text row stays whatever the layout (docs/UI.md). */}
       <SpecimenControls />
-      {/* One band for the conditions, this view's own controls and how the list
-          looks (docs/NAVIGATION.md). It folds a step at a time as the toolbar
-          narrows instead of growing a row (docs/UI.md). */}
-      <FilterRow viewControls={<ViewControls />} display={<DisplayControls />} />
+      {/* The conditions, only while the user has the row open (or a smart
+          folder shows its own). Opening it moves the list down: the user's own
+          doing (docs/UI.md, the exception for what the user opens and closes). */}
+      {rowShown && <FilterRow />}
     </header>
   );
 }
 
 /**
  * Everything that belongs to the open view alone — what narrows it, what
- * describes it, and its one action (docs/UI.md「この表示の操作」). Right of
- * the conditions, so the first condition sits in the same place whatever view
- * is open; the action stays put while the rest scrolls when room runs short.
+ * describes it, and its one action (docs/UI.md「ツールバー」). Right of the
+ * title, so nothing right of it moves whatever view is open.
  *
  * Adding isn't here: things are dropped onto the window, or added from the
  * ファイル menu (docs/MENUS.md).
@@ -266,93 +240,36 @@ function ViewControls() {
   return null;
 }
 
-/** The open view's one action, in the same place on the band whatever it is. */
+/** The open view's one action, in the same place whatever it is. */
 const viewAction = "flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2.5 whitespace-nowrap @max-5xl:px-2";
 
 /**
- * How the list looks, at the right end of the band. As the toolbar narrows
- * these fold in reverse order of how often they are used, each staying in its
- * own place: レイアウト into the display menu first, the order down to its
- * icon, and the grouping last of all (docs/UI.md). The sizes are on the
- * specimen text row.
+ * Opens and closes the filter row (docs/NAVIGATION.md「絞り込みの行」). With
+ * conditions on it is filled and shows how many, open or closed, so a narrowed
+ * list is never a surprise. A smart folder shows the row whatever the choice.
  */
-function DisplayControls() {
-  const sort = useStore((s) => s.sort);
-  const desc = useStore((s) => s.desc);
-  const setSort = useStore((s) => s.setSort);
-  const view = useStore((s) => s.view);
-  const isSystem = view.kind === "system";
-  const canManual = view.kind === "folder";
-  const manual = sort === "manual";
-  const sortLabel = manual ? "手動" : (SORTS.find((s) => s.key === sort)?.label ?? "");
-  return (
-    <>
-      {/* The order and its direction side by side, quiet until hovered. */}
-      <div className="flex h-7 shrink-0 items-stretch gap-0.5">
-        {/* Native select laid over a label sized to the current choice, so long
-            names aren't clipped and the arrow matches the UI. The wrapper holds a
-            width for the longest one, so picking another doesn't push what is
-            to its right (docs/UI.md); the label sits at its right end, next to
-            the direction, so a short one doesn't leave a gap before it. */}
-        <div className="flex min-w-[7.75rem] justify-end @max-4xl:min-w-0">
-          <label
-            title={`並び順：${sortLabel}`}
-            className="relative flex items-center gap-1.5 rounded-md pr-2 pl-2.5 whitespace-nowrap hover:bg-hover focus-within:ring-2 focus-within:ring-accent @max-4xl:px-2"
-          >
-            <ArrowUpDown size={14} className="hidden text-dim @max-4xl:block" />
-            <span className="@max-4xl:hidden">{sortLabel}</span>
-            <ChevronDown size={14} className="text-dim" />
-            <select
-              aria-label="並び順"
-              value={sort}
-              onChange={(e) => setSort(e.target.value as SortKey, desc)}
-              className="absolute inset-0 cursor-default opacity-0"
-            >
-              {SORTS.map((s) => (
-                <option
-                  key={s.key}
-                  value={s.key}
-                  disabled={(s.key === "manual" && !canManual) || (isSystem && s.key === "rating")}
-                >
-                  {s.key === "manual" && !canManual
-                    ? "手動（フォルダのみ）"
-                    : isSystem && s.key === "rating"
-                      ? "評価（ライブラリのフォントのみ）"
-                      : s.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-        <button
-          title={manual ? "手動の並びは昇順のみ" : desc ? "降順" : "昇順"}
-          disabled={manual}
-          onClick={() => setSort(sort, !desc)}
-          className="flex w-7 items-center justify-center rounded-md enabled:hover:bg-hover enabled:active:bg-press disabled:off"
-        >
-          {desc ? <ArrowDownWideNarrow size={15} /> : <ArrowUpNarrowWide size={15} />}
-        </button>
-      </div>
-      <GroupMenu />
-      <Divider className="@max-5xl:hidden" />
-      <LayoutSwitch />
-      <DisplayMenu />
-    </>
-  );
-}
-
-/** Appearance in one click (docs/UI.md「色」): システム → ライト → ダーク. The icon is the current choice. */
-function ThemeToggle({ className }: { className: string }) {
-  const current = parseAppearance(useStore((s) => s.appSettings?.appearance));
-  const next = nextAppearance(current);
+function FilterToggle() {
+  const shown = useStore(filterRowShown);
+  const n = useStore(activeConditions);
+  const locked = useStore((s) => s.view.kind === "smart" || s.editingSmart !== null);
+  const toggle = useStore((s) => s.toggleFilterRow);
+  const title = locked
+    ? "スマートフォルダの条件を表示中"
+    : `絞り込みの行を${shown ? "閉じる" : "開く"}（⌘⇧F で条件へ）${n ? `。条件 ${n} 個` : ""}`;
   return (
     <button
-      title={`外観：${appearanceLabel(current)}（クリックで「${appearanceLabel(next)}」。⌘/Ctrl+Shift+D）`}
-      aria-label={`外観を${appearanceLabel(next)}にする`}
-      onClick={() => command("view.appearance").run(useStore.getState())}
-      className={`h-8 w-8 shrink-0 items-center justify-center rounded-md ghost ${className}`}
+      title={title}
+      aria-pressed={shown}
+      disabled={locked}
+      onClick={toggle}
+      className={`flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 whitespace-nowrap disabled:opacity-80 ${
+        n ? "bg-tonal text-on-tonal enabled:hover:brightness-110" : shown ? "bg-press" : "ghost"
+      }`}
     >
-      {current === "system" ? <Monitor size={15} /> : current === "light" ? <Sun size={15} /> : <Moon size={15} />}
+      <ListFilter size={15} />
+      <span className="@max-[50rem]:hidden">絞り込み</span>
+      {n > 0 && <span className="font-medium tabular-nums">{n}</span>}
+      <ChevronDown size={13} className={`transition-transform ${shown ? "rotate-180" : ""} ${n ? "" : "text-dim"}`} />
     </button>
   );
 }

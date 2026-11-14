@@ -10,10 +10,13 @@ import {
   Keyboard,
   Languages,
   Monitor,
+  Moon,
   MoreHorizontal,
+  PanelLeftClose,
   Pin,
   Plus,
   SlidersHorizontal,
+  Sun,
   Tag as TagIcon,
   Tags,
   Trash2,
@@ -34,6 +37,7 @@ import {
   sortFoldersByName,
   transferList,
   trayList,
+  undoable,
 } from "../lib/actions";
 import { api, FONT_CATEGORIES, FONT_SCRIPTS, type Folder, type Tag, type View } from "../lib/api";
 import { SIDEBAR_ENTRIES } from "../lib/librarySettings";
@@ -54,6 +58,7 @@ import { colorHex } from "../lib/colors";
 import { comboText } from "../lib/shortcuts";
 import { composing } from "../lib/ime";
 import { dragRegion } from "../lib/titleBar";
+import { APPEARANCES, parseAppearance } from "../lib/appearance";
 
 const collapsedKey = (root: string) => `collapsed:${root}`;
 function loadCollapsed(root: string): Set<string> {
@@ -83,10 +88,9 @@ function hideItem(id: string): MenuItem {
       const scope = sidebarScope(s);
       const before = sidebarHidden(s, scope);
       s.setSidebarHidden([...before, id], scope);
-      s.notify({
+      undoable("サイドバーから隠す", () => useStore.getState().setSidebarHidden(before, scope), {
         title: `「${sidebarEntryLabel(id)}」をサイドバーから隠しました`,
         detail: scope === "app" ? "すべてのライブラリ（アプリ全体の設定）" : "このライブラリだけ",
-        action: { label: "元に戻す", onClick: () => useStore.getState().setSidebarHidden(before, scope) },
       });
     },
   };
@@ -788,7 +792,55 @@ function PlacesHeading() {
           <SlidersHorizontal size={14} />
         </button>
       </span>
+      {/* 信号機の帯が無いとき（Windows・全画面）は、隠すボタンをこの見出しの右端に置く。 */}
+      <SidebarHide className="sidebar-hide-row -my-1 ml-1 h-6 w-6" />
     </div>
+  );
+}
+
+/**
+ * 外観（システム／ライト／ダーク）。アプリ全体の設定なので、ショートカット一覧・ライブラリと並べて
+ * サイドバーの下端に置く（docs/UI.md「色」）。3 つ並べて、いまどれかを見せる。
+ */
+function AppearanceRow() {
+  const current = parseAppearance(useStore((s) => s.appSettings?.appearance));
+  const icon = { system: <Monitor size={13} />, light: <Sun size={13} />, dark: <Moon size={13} /> };
+  return (
+    <div className="flex shrink-0 items-center gap-2 border-t border-line px-4 py-1.5 text-xs text-dim">
+      外観
+      <div role="group" aria-label="外観" className="ml-auto flex h-6 items-stretch rounded-md track">
+        {APPEARANCES.map((a) => {
+          const on = a.key === current;
+          return (
+            <button
+              key={a.key}
+              aria-pressed={on}
+              title={`${a.label}（⌘/Ctrl+Shift+D で次へ）`}
+              aria-label={a.label}
+              onClick={() => useStore.getState().saveAppSettings({ appearance: a.key })}
+              className={`flex w-7 items-center justify-center rounded ${on ? "thumb" : "text-fg/85 hover:bg-hover hover:text-fg"}`}
+            >
+              {icon[a.key]}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** サイドバーを隠すボタン。開くボタンはツールバーの左端（閉じているときだけ出る）。 */
+function SidebarHide({ className }: { className: string }) {
+  const toggle = useStore((s) => s.toggleSidebar);
+  return (
+    <button
+      title="サイドバーを隠す（Tab / ⌘⌥1）"
+      aria-label="サイドバーを隠す"
+      onClick={toggle}
+      className={`${className} shrink-0 items-center justify-center rounded-md text-dim hover:bg-ink/5 hover:text-fg`}
+    >
+      <PanelLeftClose size={16} />
+    </button>
   );
 }
 
@@ -866,8 +918,10 @@ export function Sidebar() {
 
   return (
     <aside className="vibrant flex shrink-0 flex-col border-r border-line bg-panel" style={{ width: sidebarWidth }}>
-      {/* macOS: the window buttons' row, which also moves the window. */}
-      <div {...dragRegion()} className="shrink-0" style={{ height: "var(--titlebar)" }} />
+      {/* macOS: the window buttons' row, which also moves the window. サイドバーを隠すボタンはこの帯の右端。 */}
+      <div {...dragRegion()} className="flex shrink-0 items-center justify-end px-2" style={{ height: "var(--titlebar)" }}>
+        <SidebarHide className="sidebar-hide-top h-7 w-7" />
+      </div>
       {/* The library is switched seldom: at the bottom. */}
       <div className="h-2 shrink-0" />
       <nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
@@ -896,6 +950,7 @@ export function Sidebar() {
         <SmartFolderList />
         <TagList />
       </nav>
+      <AppearanceRow />
       <button
         onClick={() => useShortcutHelp.getState().setOpen(true)}
         className="flex shrink-0 items-center gap-2 border-t border-line px-4 py-2 text-xs text-dim hover:bg-ink/5 hover:text-fg"
